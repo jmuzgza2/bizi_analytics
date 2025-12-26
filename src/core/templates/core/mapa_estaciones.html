@@ -73,7 +73,14 @@
             reloj.innerText = frame.hora_legible; // Actualizar reloj
             
             frame.datos.forEach(estacion => {
-                const color = (estacion.bicis === 0) ? '#dc3545' : '#198754';
+                let color;
+                if (estacion.bicis === 0) {
+                    color = '#D50000'; // Rojo (0 bicis)
+                } else if (estacion.bicis <= 2) {
+                    color = '#fd7e14'; // Naranja (1 o 2 bicis)
+                } else {
+                    color = '#198754'; // Verde (> 2 bicis)
+                }
                 const radio = (estacion.bicis === 0) ? 6 : 6 + (estacion.bicis / 5); // Círculos más grandes si hay muchas bicis
 
                 // Si el marcador ya existe, lo actualizamos
