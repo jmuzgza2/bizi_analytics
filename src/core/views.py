@@ -5,6 +5,8 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Sum
 from django.utils import timezone
 import datetime
+from datetime import timedelta
+
  
 
 
@@ -96,12 +98,59 @@ def detalle_estacion(request, estacion_id):
         stats['pct_sin_bicis'] = round((conteo_sin_bicis / total) * 100, 1)
         stats['pct_sin_anclajes'] = round((conteo_sin_anclajes / total) * 100, 1)
 
+
+
+    ### MAPA DE CALOR 
+
+    # Analizamos solo los últimos 30 días para que sea representativo
+    hace_un_mes = timezone.now() - timedelta(days=30)
+    
+    # Optimizamos la consulta trayendo solo lo necesario
+    lecturas_mes = LecturaEstacion.objects.filter(
+        estacion=estacion,
+        captura__timestamp__gte=hace_un_mes
+    ).select_related('captura').only('captura__timestamp', 'bicis_disponibles')
+
+    # Inicializamos la matriz 7 (días) x 24 (horas)
+    # Estructura de celda: {'suma': 0, 'conteo': 0}
+    heatmap_raw = [[{'s': 0, 'c': 0} for _ in range(24)] for _ in range(7)]
+
+    for l in lecturas_mes:
+        # Convertimos a hora local para que el patrón coincida con la realidad de Zaragoza
+        fecha_local = timezone.localtime(l.captura.timestamp)
+        
+        dia = fecha_local.weekday() # 0=Lunes ... 6=Domingo
+        hora = fecha_local.hour
+        
+        heatmap_raw[dia][hora]['s'] += l.bicis_disponibles
+        heatmap_raw[dia][hora]['c'] += 1
+
+    # Preparamos los datos finales para la plantilla
+    dias_nombres = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+    heatmap_data = []
+
+    for i in range(7):
+        fila_horas = []
+        for h in range(24):
+            datos = heatmap_raw[i][h]
+            if datos['c'] > 0:
+                promedio = round(datos['s'] / datos['c'], 1)
+            else:
+                promedio = None # Sin datos
+            fila_horas.append(promedio)
+            
+        heatmap_data.append({
+            'nombre': dias_nombres[i],
+            'horas': fila_horas
+        })
+
     context = {
         'estacion': estacion,
         'lecturas': reversed(lecturas), # Para la tabla (orden inverso)
         'dataset_bicis': dataset_bicis,
         'dataset_anclajes': dataset_anclajes,
         'stats': stats, # Pasamos las estadísticas
+        'heatmap_data': heatmap_data, # mAPA DE CALOR
     }
     return render(request, 'core/detalle_estacion.html', context)
 
@@ -119,7 +168,7 @@ def mapa_estaciones(request):
     for c in capturas:
         # Para cada instante de tiempo, sacamos la foto de las estaciones
         fecha_local = timezone.localtime(c.timestamp)
-        
+
         estado_estaciones = []
         qs = c.lecturas.select_related('estacion').all()
         

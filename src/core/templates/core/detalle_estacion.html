@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load l10n %}
 <html>
 <head>
     <title>{{ estacion.nombre }} - Estadísticas</title>
@@ -55,6 +56,102 @@
             </div>
         </div>
     </div>
+
+
+    <style>
+    .heatmap-container {
+        overflow-x: auto;
+    }
+    .heatmap-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 2px;
+        font-size: 0.75rem;
+    }
+    .heatmap-cell {
+        height: 25px;
+        min-width: 25px;
+        text-align: center;
+        vertical-align: middle;
+        border-radius: 3px;
+        color: rgba(0,0,0,0.6);
+        cursor: pointer;
+        transition: transform 0.1s;
+    }
+    .heatmap-cell:hover {
+        transform: scale(1.2);
+        border: 1px solid #333;
+        z-index: 10;
+        font-weight: bold;
+        color: black;
+    }
+    .dia-label {
+        font-weight: bold;
+        text-align: right;
+        padding-right: 8px;
+        width: 40px;
+    }
+    .hora-label {
+        text-align: center;
+        color: #666;
+        font-size: 0.7rem;
+    }
+</style>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">🔥 Patrones de Disponibilidad (Últimos 30 días)</h5>
+        <small class="text-white-50">Rojo = Vacío | Verde = Lleno</small>
+    </div>
+    <div class="card-body heatmap-container">
+        
+        <table class="heatmap-table">
+            <tr>
+                <td></td>
+                {% for i in "x"|rjust:"24" %}
+                <td class="hora-label">{{ forloop.counter0 }}h</td>
+                {% endfor %}
+            </tr>
+
+            {% for dia in heatmap_data %}
+            <tr>
+                <td class="dia-label">{{ dia.nombre }}</td>
+                
+                {% load l10n %} 
+
+                {% for valor in dia.horas %}
+                    {% if valor is None %}
+                        <td class="heatmap-cell" style="background-color: #f8f9fa;" title="Sin datos de lectura">
+                            <span style="opacity: 0.2;">·</span>
+                        </td>
+                    {% else %}
+                        <td class="heatmap-cell" 
+                            title="{{ dia.nombre }} {{ forloop.counter0 }}:00 - Promedio: {{ valor }} bicis"
+                            style="
+                                /* IMPORTANTE: Usamos |unlocalize para que ponga 5.0 en vez de 5,0 */
+                                --capacidad: {{ estacion.capacidad_total|default:20|unlocalize }};
+                                --valor: {{ valor|unlocalize }};
+                                
+                                /* Fórmula de color HSL */
+                                background-color: hsl(calc( (var(--valor) / var(--capacidad)) * 120 ), 80%, 75%);
+                            ">
+                            <span style="font-size: 0.6rem; opacity: 0.5;">{{ valor|floatformat:0 }}</span>
+                        </td>
+                    {% endif %}
+                {% endfor %}    
+            </tr>
+            {% endfor %}
+        </table>
+        <div class="text-center mt-2 small text-muted">
+            Los colores representan el promedio de bicicletas disponibles a esa hora y día de la semana.
+        </div>
+    </div>
+</div>
+
+
+
+
+
 
     <div class="card mb-4 shadow-sm">
         <div class="card-header bg-light fw-bold">Disponibilidad: Bicis vs Anclajes</div>
