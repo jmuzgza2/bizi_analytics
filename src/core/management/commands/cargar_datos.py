@@ -75,13 +75,18 @@ class Command(BaseCommand):
             for item in items:
                 eid = item.get('id')
                 coords = item.get('geometry', {}).get('coordinates', [0,0])
+
+                bicis = int(item.get('bicisDisponibles', 0))
+                anclajes = int(item.get('anclajesDisponibles', 0))
+                capacidad_calculada = bicis + anclajes
                 
                 estacion_obj, _ = Estacion.objects.get_or_create(
                     id_externo=eid,
                     defaults={
                         'nombre': item.get('title', 'Desconocido'),
                         'latitud': coords[1],
-                        'longitud': coords[0]
+                        'longitud': coords[0],
+                        'capacidad_total': capacidad_calculada
                     }
                 )
 
