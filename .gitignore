@@ -1,0 +1,23 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+
+# --- Variables de Entorno y Secretos (CRÍTICO) ---
+.env
+.env.local
+
+# --- Docker ---
+# Ignoramos los datos de la base de datos si están en una carpeta local
+postgres_data/
+# Ignoramos logs si los hubiera
+*.log
+
+# --- IDEs (Opcional) ---
+.vscode/
+.idea/
+
+# --- Base de datos SQLite (por si acaso se creó alguna vez) ---
+db.sqlite3

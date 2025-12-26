@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mapa Temporal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map { height: 600px; width: 100%; border-radius: 8px; }
+        .control-panel { background: rgba(255,255,255,0.9); padding: 15px; border-radius: 8px; margin-top: -15px; position: relative; z-index: 999; border: 1px solid #ddd;}
+    </style>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="#">🚲 Bizi Analytics</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="{% url 'lista_estaciones' %}">Lista</a>
+                <a class="nav-link active" href="{% url 'mapa_estaciones' %}">Mapa Tiempo</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h3>Evolución Temporal</h3>
+        
+        <div class="card p-2 shadow-sm">
+            <div id="map"></div>
+        </div>
+
+        <div class="control-panel shadow mt-3 text-center">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <button id="btnPlay" class="btn btn-primary">▶ Reproducir</button>
+                <h4 id="reloj" class="m-0 fw-bold text-primary">--:--</h4>
+            </div>
+            
+            <input type="range" class="form-range" id="timeSlider" min="0" max="100" step="1" value="0">
+            <small class="text-muted">Arrastra para viajar en el tiempo</small>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // 1. CARGAR DATOS
+        const timeline = JSON.parse('{{ timeline_json|escapejs }}');
+        
+        if (timeline.length === 0) {
+            alert("No hay datos históricos suficientes.");
+        }
+
+        // Configurar el Slider
+        const slider = document.getElementById('timeSlider');
+        const reloj = document.getElementById('reloj');
+        const btnPlay = document.getElementById('btnPlay');
+        
+        slider.max = timeline.length - 1;
+        slider.value = timeline.length - 1; // Empezar en el último (ahora)
+
+        // 2. INICIALIZAR MAPA
+        const map = L.map('map').setView([41.6488, -0.8891], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: 'OpenStreetMap'
+        }).addTo(map);
+
+        // Almacén de marcadores (Diccionario ID -> Objeto Marcador Leaflet)
+        // Esto es clave: No borramos y creamos marcadores, solo ACTUALIZAMOS sus propiedades. Es mucho más rápido.
+        let marcadores = {}; 
+
+        // Función para dibujar un instante concreto (frame)
+        function dibujarFrame(index) {
+            const frame = timeline[index];
+            reloj.innerText = frame.hora_legible; // Actualizar reloj
+            
+            frame.datos.forEach(estacion => {
+                const color = (estacion.bicis === 0) ? '#dc3545' : '#198754';
+                const radio = (estacion.bicis === 0) ? 6 : 6 + (estacion.bicis / 5); // Círculos más grandes si hay muchas bicis
+
+                // Si el marcador ya existe, lo actualizamos
+                if (marcadores[estacion.id]) {
+                    marcadores[estacion.id].setStyle({
+                        fillColor: color,
+                        radius: radio
+                    });
+                    // Actualizamos el popup también
+                    marcadores[estacion.id].setPopupContent(`
+                        <strong>${estacion.nombre}</strong><br>
+                        Bicis: ${estacion.bicis}
+                    `);
+                } else {
+                    // Si es la primera vez (frame 0), lo creamos
+                    const circle = L.circleMarker([estacion.lat, estacion.lon], {
+                        radius: radio,
+                        fillColor: color,
+                        color: "#fff",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(map);
+                    
+                    circle.bindPopup(`<strong>${estacion.nombre}</strong><br>Bicis: ${estacion.bicis}`);
+                    marcadores[estacion.id] = circle;
+                }
+            });
+        }
+
+        // 3. EVENTOS
+        
+        // Al mover el slider
+        slider.addEventListener('input', function() {
+            dibujarFrame(this.value);
+        });
+
+        // Inicializar con el último dato
+        dibujarFrame(slider.value);
+
+        // Lógica de Reproducción (Play)
+        let intervalo = null;
+        btnPlay.addEventListener('click', function() {
+            if (intervalo) {
+                // Si ya está sonando, pausar
+                clearInterval(intervalo);
+                intervalo = null;
+                btnPlay.innerText = "▶ Reproducir";
+                btnPlay.classList.replace('btn-danger', 'btn-primary');
+            } else {
+                // Empezar
+                // Si estamos al final, rebobinar al principio
+                if (parseInt(slider.value) === timeline.length - 1) {
+                    slider.value = 0;
+                }
+                
+                btnPlay.innerText = "⏸ Pausa";
+                btnPlay.classList.replace('btn-primary', 'btn-danger');
+
+                intervalo = setInterval(() => {
+                    let val = parseInt(slider.value);
+                    if (val < timeline.length - 1) {
+                        slider.value = val + 1;
+                        dibujarFrame(slider.value);
+                    } else {
+                        // Fin de la cinta
+                        clearInterval(intervalo);
+                        intervalo = null;
+                        btnPlay.innerText = "▶ Reproducir";
+                        btnPlay.classList.replace('btn-danger', 'btn-primary');
+                    }
+                }, 200); // 200ms por frame (velocidad de animación)
+            }
+        });
+    </script>
+</body>
+</html>
