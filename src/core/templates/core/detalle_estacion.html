@@ -11,7 +11,15 @@
 <body class="container mt-4 mb-5">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-            <h1 class="mb-0">{{ estacion.nombre }}</h1>
+            <div class="d-flex align-items-center gap-3">
+                <h1 class="mb-0">{{ estacion.nombre }}</h1>
+                
+                <button id="btnFavDetalle" class="btn btn-outline-secondary" 
+                        style="border-radius: 50%; width: 42px; height: 42px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                    🤍
+                </button>
+            </div>
+            
             <small class="text-muted">ID: {{ estacion.id_externo }} | Capacidad Total: {{ estacion.capacidad_total }}</small>
         </div>
         <a href="{% url 'lista_estaciones' %}" class="btn btn-outline-secondary">Volver</a>
@@ -254,6 +262,58 @@
                 }
             }
         });
+
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // USAMOS LA MISMA CLAVE QUE EN EL LISTADO PARA QUE SE SINCRONICEN
+            const STORAGE_KEY = 'bizi_favoritos_lista'; 
+            const btnFav = document.getElementById('btnFavDetalle');
+            
+            // Django nos da el ID de la estación actual
+            const currentId = "{{ estacion.id_externo }}"; 
+
+            // 1. LEER
+            function getFavoritos() {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            }
+
+            // 2. ACTUALIZAR VISUALMENTE
+            function updateBtn() {
+                const favs = getFavoritos();
+                const esFav = favs.includes(currentId);
+
+                if (esFav) {
+                    btnFav.classList.remove('btn-outline-secondary');
+                    btnFav.classList.add('btn-outline-danger'); // Borde rojo
+                    btnFav.innerHTML = '❤️';
+                } else {
+                    btnFav.classList.remove('btn-outline-danger');
+                    btnFav.classList.add('btn-outline-secondary'); // Borde gris
+                    btnFav.innerHTML = '🤍';
+                }
+            }
+
+            // 3. EVENTO CLICK
+            btnFav.addEventListener('click', function() {
+                let favs = getFavoritos();
+                
+                if (favs.includes(currentId)) {
+                    // Si ya está, lo quitamos
+                    favs = favs.filter(id => id !== currentId);
+                } else {
+                    // Si no está, lo ponemos
+                    favs.push(currentId);
+                }
+
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
+                updateBtn(); // Repintar botón
+            });
+
+            // Carga inicial
+            updateBtn();
+        });
+
+
     </script>
 </body>
 </html>
