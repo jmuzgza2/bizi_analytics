@@ -7,12 +7,48 @@
 </head>
 <body class="bg-light">
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-        <div class="container">
-            <a class="navbar-brand" href="#">🚲 Bizi Analytics</a>
-            <div class="navbar-nav">
-                <a class="nav-link active" href="{% url 'lista_estaciones' %}">Lista</a>
-                <a class="nav-link" href="{% url 'mapa_estaciones' %}">Mapa</a> 
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow mb-4" 
+         style="background: linear-gradient(135deg, #0b5ed7 0%, #052c65 100%);"> <div class="container">
+            
+            <a class="navbar-brand d-flex align-items-center gap-3" href="{% url 'lista_estaciones' %}">
+                
+                <div class="bg-white text-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" 
+                     style="width: 50px; height: 50px; flex-shrink: 0;">
+                    <span style="font-size: 1.8rem; margin-bottom: 3px;">🚲</span>
+                </div>
+
+                <div class="d-flex flex-column">
+                    <span class="fw-bold text-white lh-1" style="font-size: 1.5rem; letter-spacing: -0.5px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">
+                        HabemusBizi
+                    </span>
+                    <span class="text-white-50" style="font-size: 0.85rem; letter-spacing: 1px;">
+                        by <span class="fw-bold text-white" style="color: #e0efff !important; text-transform: uppercase;">jmmesa</span>
+                    </span>
+                </div>
+            </a>
+
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+                <div class="navbar-nav gap-2 mt-3 mt-lg-0 align-items-center">
+                    
+                    {% with url_name=request.resolver_match.url_name %}
+                    
+                    <a href="{% url 'lista_estaciones' %}" 
+                       class="btn {% if url_name == 'lista_estaciones' %}btn-light text-primary{% else %}btn-outline-light{% endif %} fw-bold px-4 rounded-pill shadow-sm d-flex align-items-center gap-2">
+                        📋 Lista
+                    </a>
+                    
+                    <a href="{% url 'mapa_estaciones' %}" 
+                       class="btn {% if url_name == 'mapa_estaciones' %}btn-light text-primary{% else %}btn-outline-light{% endif %} fw-bold px-4 rounded-pill shadow-sm d-flex align-items-center gap-2">
+                        ⏱️ Mapa Tiempo
+                    </a>
+
+                    {% endwith %}
+
+                </div>
             </div>
         </div>
     </nav>
