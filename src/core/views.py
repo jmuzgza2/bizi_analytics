@@ -146,7 +146,7 @@ def detalle_estacion(request, estacion_id):
 
     context = {
         'estacion': estacion,
-        'lecturas': reversed(lecturas), # Para la tabla (orden inverso)
+        'lecturas': reversed(lecturas[-10:]), # Para la tabla (orden inverso)
         'dataset_bicis': dataset_bicis,
         'dataset_anclajes': dataset_anclajes,
         'stats': stats, # Pasamos las estadísticas

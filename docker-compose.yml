@@ -1,12 +1,14 @@
 services:
   db:
     image: postgres:15-alpine
-    container_name: bizi_db_local
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    container_name: bizi_db
+    # CAMBIO CLAVE: Usamos env_file en lugar de environment
+    # Así es igual que en Producción y no dependes de variables de tu shell
+    env_file:
+      - .env
     ports:
+      # Mantenemos el 5433 externo para que no choque con tu Postgres local si tienes uno
+      # En AWS este puerto estará abierto en el contenedor, pero cerrado por el Firewall. No pasa nada.
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -15,7 +17,6 @@ services:
   web:
     build: .
     container_name: bizi_web
-    # Como montamos ./src en /app, manage.py está en la raíz
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./src:/app
@@ -25,11 +26,11 @@ services:
       - .env
     depends_on:
       - db
+    restart: always
 
   monitor:
     build: .
     container_name: bizi_monitor
-    # Igual aquí, manage.py está en la raíz
     command: python manage.py iniciar_monitor
     volumes:
       - ./src:/app
@@ -38,6 +39,7 @@ services:
     depends_on:
       - db
       - web
+    restart: always
     dns:
       - 8.8.8.8
       - 8.8.4.4
