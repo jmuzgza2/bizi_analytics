@@ -4,6 +4,7 @@ import json
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Sum
 from django.utils import timezone
+from django.urls import reverse 
 import datetime
 from datetime import timedelta
 
@@ -179,6 +180,9 @@ def mapa_estaciones(request):
                 'lon': float(l.estacion.longitud),
                 'nombre': l.estacion.nombre,
                 'bicis': l.bicis_disponibles,
+                'anclajes': l.anclajes_libres,
+                'url_detalle': reverse('detalle_estacion', args=[l.estacion.id_externo])
+
                 # Enviamos solo lo necesario para ahorrar datos
             })
             

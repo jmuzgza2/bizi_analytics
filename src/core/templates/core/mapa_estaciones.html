@@ -83,6 +83,28 @@
                 }
                 const radio = (estacion.bicis === 0) ? 6 : 6 + (estacion.bicis / 5); // Círculos más grandes si hay muchas bicis
 
+                // --- NUEVO: Generamos el contenido del popup en una variable para no repetirlo ---
+                const contenidoPopup = `
+                    <div class="text-center">
+                        <h6 class="fw-bold mb-2">${estacion.nombre}</h6>
+                        
+                        <div class="d-flex justify-content-center gap-3 mb-3">
+                            <span class="badge bg-success fs-6">
+                                🚲 ${estacion.bicis}
+                            </span>
+                            <span class="badge bg-secondary fs-6">
+                                🅿️ ${estacion.anclajes}
+                            </span>
+                        </div>
+
+                        <a href="${estacion.url_detalle}" class="btn btn-primary btn-sm w-100 text-white" style="text-decoration:none;">
+                            Ver Historial 📊
+                        </a>
+                    </div>
+                `;
+
+
+
                 // Si el marcador ya existe, lo actualizamos
                 if (marcadores[estacion.id]) {
                     marcadores[estacion.id].setStyle({
@@ -91,8 +113,7 @@
                     });
                     // Actualizamos el popup también
                     marcadores[estacion.id].setPopupContent(`
-                        <strong>${estacion.nombre}</strong><br>
-                        Bicis: ${estacion.bicis}
+                       marcadores[estacion.id].setPopupContent(contenidoPopup);
                     `);
                 } else {
                     // Si es la primera vez (frame 0), lo creamos
@@ -105,7 +126,7 @@
                         fillOpacity: 0.8
                     }).addTo(map);
                     
-                    circle.bindPopup(`<strong>${estacion.nombre}</strong><br>Bicis: ${estacion.bicis}`);
+                    circle.bindPopup(contenidoPopup);
                     marcadores[estacion.id] = circle;
                 }
             });
