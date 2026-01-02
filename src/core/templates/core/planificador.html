@@ -1,0 +1,181 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Oráculo Bizi - Predicción{% endblock %}
+
+{% block content %}
+<div class="container py-3">
+    
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">🔮 Oráculo Bizi</h2>
+        <p class="text-muted">Calcula tus probabilidades de éxito basándote en la historia reciente.</p>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            
+            <div class="card shadow-sm border-0 mb-5">
+                <div class="card-body p-4 bg-light rounded">
+                    <form method="get" class="row g-3">
+                        
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">📍 Salgo de...</label>
+                            <select name="origen" class="form-select" required>
+                                <option value="">Elige estación...</option>
+                                {% for e in estaciones %}
+                                <option value="{{ e.id_externo }}" {% if form_data.origen == e.id_externo %}selected{% endif %}>
+                                    {{ e.id_externo }} - {{ e.nombre }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">🏁 Voy a...</label>
+                            <select name="destino" class="form-select" required>
+                                <option value="">Elige estación...</option>
+                                {% for e in estaciones %}
+                                <option value="{{ e.id_externo }}" {% if form_data.destino == e.id_externo %}selected{% endif %}>
+                                    {{ e.id_externo }} - {{ e.nombre }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-5">
+                            <label class="form-label fw-bold">Día de la semana</label>
+                            <select name="dia" class="form-select" required>
+                                <option value="2" {% if form_data.dia == '2' %}selected{% endif %}>Lunes</option>
+                                <option value="3" {% if form_data.dia == '3' %}selected{% endif %}>Martes</option>
+                                <option value="4" {% if form_data.dia == '4' %}selected{% endif %}>Miércoles</option>
+                                <option value="5" {% if form_data.dia == '5' %}selected{% endif %}>Jueves</option>
+                                <option value="6" {% if form_data.dia == '6' %}selected{% endif %}>Viernes</option>
+                                <option value="7" {% if form_data.dia == '7' %}selected{% endif %}>Sábado</option>
+                                <option value="1" {% if form_data.dia == '1' %}selected{% endif %}>Domingo</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-7">
+                            <label class="form-label fw-bold">Hora aproximada</label>
+                            <div class="input-group">
+                                <select name="hora" class="form-select" required>
+                                    {% for i in "0123456789"|make_list %}
+                                        {% endfor %}
+                                    <option value="6" {% if form_data.hora == '6' %}selected{% endif %}>06</option>
+                                    <option value="7" {% if form_data.hora == '7' %}selected{% endif %}>07</option>
+                                    <option value="8" {% if form_data.hora == '8' %}selected{% endif %}>08</option>
+                                    <option value="9" {% if form_data.hora == '9' %}selected{% endif %}>09</option>
+                                    <option value="10" {% if form_data.hora == '10' %}selected{% endif %}>10</option>
+                                    <option value="11" {% if form_data.hora == '11' %}selected{% endif %}>11</option>
+                                    <option value="12" {% if form_data.hora == '12' %}selected{% endif %}>12</option>
+                                    <option value="13" {% if form_data.hora == '13' %}selected{% endif %}>13</option>
+                                    <option value="14" {% if form_data.hora == '14' %}selected{% endif %}>14</option>
+                                    <option value="15" {% if form_data.hora == '15' %}selected{% endif %}>15</option>
+                                    <option value="16" {% if form_data.hora == '16' %}selected{% endif %}>16</option>
+                                    <option value="17" {% if form_data.hora == '17' %}selected{% endif %}>17</option>
+                                    <option value="18" {% if form_data.hora == '18' %}selected{% endif %}>18</option>
+                                    <option value="19" {% if form_data.hora == '19' %}selected{% endif %}>19</option>
+                                    <option value="20" {% if form_data.hora == '20' %}selected{% endif %}>20</option>
+                                    <option value="21" {% if form_data.hora == '21' %}selected{% endif %}>21</option>
+                                    <option value="22" {% if form_data.hora == '22' %}selected{% endif %}>22</option>
+                                    <option value="23" {% if form_data.hora == '23' %}selected{% endif %}>23</option>
+                                </select>
+                                <span class="input-group-text">:</span>
+                                <select name="minuto" class="form-select" required>
+                                    <option value="0" {% if form_data.minuto == '0' %}selected{% endif %}>00</option>
+                                    <option value="15" {% if form_data.minuto == '15' %}selected{% endif %}>15</option>
+                                    <option value="30" {% if form_data.minuto == '30' %}selected{% endif %}>30</option>
+                                    <option value="45" {% if form_data.minuto == '45' %}selected{% endif %}>45</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-12 text-center mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg px-5 rounded-pill shadow">
+                                🔮 Consultar Oráculo
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% if resultado %}
+            <div class="row g-4 fade-in">
+                
+                <div class="col-md-6">
+                    <div class="card h-100 border-{{ resultado.origen.color }} shadow-sm">
+                        <div class="card-header bg-{{ resultado.origen.color }} text-white text-center fw-bold">
+                            🚲 ORIGEN: Encontrar Bici
+                        </div>
+                        <div class="card-body text-center">
+                            <h5 class="card-title text-truncate mb-4">{{ resultado.origen.nombre }}</h5>
+                            
+                            <div class="d-inline-flex align-items-center justify-content-center rounded-circle border border-4 border-{{ resultado.origen.color }} mb-3" style="width: 100px; height: 100px;">
+                                <span class="h2 m-0 fw-bold text-{{ resultado.origen.color }}">
+                                    {{ resultado.origen.pct }}%
+                                </span>
+                            </div>
+                            
+                            <p class="text-muted small mb-0">Probabilidad de éxito</p>
+                            
+                            <hr>
+                            
+                            <div class="d-flex justify-content-between px-2">
+                                <div class="text-start">
+                                    <small class="text-muted d-block">Media Histórica</small>
+                                    <span class="fw-bold fs-5">{{ resultado.origen.media }}</span> 
+                                    <small>bicis</small>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted d-block">Tendencia</small>
+                                    <span class="fw-bold">{{ resultado.origen.tendencia }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card h-100 border-{{ resultado.destino.color }} shadow-sm">
+                        <div class="card-header bg-{{ resultado.destino.color }} text-white text-center fw-bold">
+                            🅿️ DESTINO: Encontrar Hueco
+                        </div>
+                        <div class="card-body text-center">
+                            <h5 class="card-title text-truncate mb-4">{{ resultado.destino.nombre }}</h5>
+                            
+                            <div class="d-inline-flex align-items-center justify-content-center rounded-circle border border-4 border-{{ resultado.destino.color }} mb-3" style="width: 100px; height: 100px;">
+                                <span class="h2 m-0 fw-bold text-{{ resultado.destino.color }}">
+                                    {{ resultado.destino.pct }}%
+                                </span>
+                            </div>
+
+                            <p class="text-muted small mb-0">Probabilidad de éxito</p>
+
+                            <hr>
+                            
+                            <div class="d-flex justify-content-between px-2">
+                                <div class="text-start">
+                                    <small class="text-muted d-block">Media Histórica</small>
+                                    <span class="fw-bold fs-5">{{ resultado.destino.media }}</span> 
+                                    <small>anclajes</small>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted d-block">Tendencia</small>
+                                    <span class="fw-bold">{{ resultado.destino.tendencia }}</span> </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="alert alert-info mt-4 text-center small">
+                <i class="bi bi-info-circle"></i> 
+                Cálculo basado en registros históricos a las {{ form_data.hora }}:{{ form_data.minuto|default:"00" }} (±4 min).
+            </div>
+
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endblock %}

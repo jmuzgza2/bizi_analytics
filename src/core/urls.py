@@ -8,4 +8,5 @@ urlpatterns = [
     # Ruta detalle: /estacion/1/
     path('estacion/<int:estacion_id>/', views.detalle_estacion, name='detalle_estacion'),
     path('mapa/', views.mapa_estaciones, name='mapa_estaciones'),
+    path('planificador/', views.planificador, name='planificador'),
 ]

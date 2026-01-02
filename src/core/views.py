@@ -212,3 +212,121 @@ def mapa_estaciones(request):
         'timeline_json': json.dumps(timeline_data, cls=DjangoJSONEncoder)
     }
     return render(request, 'core/mapa_estaciones.html', context)
+
+# --- LÓGICA DEL ORÁCULO ---
+
+def calcular_prediccion_precisa(estacion_id, dia_semana, hora, minuto):
+    """
+    Algoritmo de 'Micro-Ventana':
+    Analiza exclusivamente el registro solicitado y sus vecinos inmediatos (±4 min)
+    de los últimos 60 días. Calcula media y tendencia.
+    """
+    # 1. Definir la ventana de tiempo (Target ± 4 min)
+    # Usamos una fecha dummy arbitraria para poder operar con tiempos
+    dummy_date = datetime.datetime(2000, 1, 1, hora, minuto)
+    start_time = (dummy_date - timedelta(minutes=4)).time()
+    end_time = (dummy_date + timedelta(minutes=4)).time()
+
+    # 2. Filtrar histórico (Últimos 60 días)
+    hace_dos_meses = timezone.now() - timedelta(days=60)
+    
+    # Obtenemos TODOS los registros que caen en esa micro-ventana
+    qs = LecturaEstacion.objects.filter(
+        estacion__id_externo=estacion_id,
+        captura__timestamp__gte=hace_dos_meses,
+        captura__timestamp__week_day=dia_semana,
+        captura__timestamp__time__range=(start_time, end_time)
+    )
+
+    if not qs.exists():
+        return None
+
+    # 3. CÁLCULO DE MEDIAS
+    stats = qs.aggregate(
+        promedio_bicis=Avg('bicis_disponibles'),
+        promedio_anclajes=Avg('anclajes_libres')
+    )
+    
+    media_b = round(stats['promedio_bicis'] or 0, 1)
+    media_a = round(stats['promedio_anclajes'] or 0, 1)
+
+    # 4. CÁLCULO DE TENDENCIA
+    # Comparamos el promedio ANTES del minuto target vs DESPUÉS
+    antes = qs.filter(captura__timestamp__time__lt=dummy_date.time()).aggregate(m=Avg('bicis_disponibles'))['m'] or media_b
+    despues = qs.filter(captura__timestamp__time__gt=dummy_date.time()).aggregate(m=Avg('bicis_disponibles'))['m'] or media_b
+    
+    diff = despues - antes
+    
+    if diff > 0.3:
+        tendencia = "Subiendo 📈" # Se está llenando
+    elif diff < -0.3:
+        tendencia = "Bajando 📉" # Se está vaciando
+    else:
+        tendencia = "Estable 😐"
+
+    # 5. SEMÁFORO DE PROBABILIDAD (Umbral de seguridad: 5 bicis/huecos)
+    # Si hay > 5, es 100% seguro. Si hay 0, es 0%.
+    prob_bici = min(100, int((media_b / 5.0) * 100))
+    prob_hueco = min(100, int((media_a / 5.0) * 100))
+
+    return {
+        'prob_bici': prob_bici,
+        'prob_hueco': prob_hueco,
+        'media_bicis': media_b,
+        'media_anclajes': media_a,
+        'tendencia': tendencia
+    }
+
+def planificador(request):
+    estaciones = Estacion.objects.all().order_by('nombre')
+    resultado = None
+    
+    if 'origen' in request.GET and 'destino' in request.GET:
+        try:
+            origen_id = request.GET.get('origen')
+            destino_id = request.GET.get('destino')
+            dia = int(request.GET.get('dia')) # 0=Lunes ... 6=Domingo (Ojo: Django usa: 1=Domingo, 2=Lunes...)
+            # CORRECCIÓN: Django week_day: 1 (Sunday) to 7 (Saturday).
+            # Ajustaremos el formulario para enviar el valor correcto de Django.
+            
+            hora = int(request.GET.get('hora'))
+            minuto = int(request.GET.get('minuto', 0))
+            
+            # Llamamos a la lógica
+            datos_origen = calcular_prediccion_precisa(origen_id, dia, hora, minuto)
+            datos_destino = calcular_prediccion_precisa(destino_id, dia, hora, minuto)
+            
+            # Recuperar nombres para pintar bonito
+            nom_origen = Estacion.objects.get(id_externo=origen_id).nombre
+            nom_destino = Estacion.objects.get(id_externo=destino_id).nombre
+            
+            # Manejo de "Sin datos"
+            if not datos_origen: datos_origen = {'prob_bici': 0, 'media_bicis': 0, 'tendencia': 'Sin datos'}
+            if not datos_destino: datos_destino = {'prob_hueco': 0, 'media_anclajes': 0, 'tendencia': 'Sin datos'}
+
+            resultado = {
+                'origen': {
+                    'nombre': nom_origen,
+                    'pct': datos_origen['prob_bici'],
+                    'media': datos_origen['media_bicis'],
+                    'tendencia': datos_origen.get('tendencia', '-'),
+                    'color': 'success' if datos_origen['prob_bici'] > 60 else 'warning' if datos_origen['prob_bici'] > 20 else 'danger'
+                },
+                'destino': {
+                    'nombre': nom_destino,
+                    'pct': datos_destino['prob_hueco'],
+                    'media': datos_destino['media_anclajes'],
+                    'color': 'success' if datos_destino['prob_hueco'] > 60 else 'warning' if datos_destino['prob_hueco'] > 20 else 'danger'
+                }
+            }
+        except Exception as e:
+            # Si hay algún error de conversión o datos, simplemente no mostramos resultado
+            print(f"Error en planificador: {e}")
+            pass
+
+    context = {
+        'estaciones': estaciones,
+        'resultado': resultado,
+        'form_data': request.GET 
+    }
+    return render(request, 'core/planificador.html', context)
