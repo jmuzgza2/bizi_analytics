@@ -59,49 +59,46 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // --- 1. GESTIÓN DE FAVORITOS (LOCALSTORAGE) ---
-        // Copiamos la lógica para que el mapa sepa qué estaciones son favoritas
+        // --- 1. GESTIÓN DE FAVORITOS ---
         const STORAGE_KEY = 'bizi_favoritos_lista';
 
         function getFavoritos() {
             return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
         }
 
-        // Función global para que el botón dentro del Popup pueda llamarla
         window.toggleMapFavorito = function(id) {
             let favs = getFavoritos();
             const idStr = String(id);
-            
             if (favs.includes(idStr)) {
-                favs = favs.filter(f => f !== idStr); // Quitar
+                favs = favs.filter(f => f !== idStr);
             } else {
-                favs.push(idStr); // Añadir
+                favs.push(idStr);
             }
-            
             localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
-            
-            // Redibujamos el frame actual para que el icono del corazón cambie al instante
+            // Redibujamos frame actual
             const slider = document.getElementById('timeSlider');
             dibujarFrame(slider.value); 
         };
 
-        // --- 2. CONFIGURACIÓN DEL MAPA ---
+        // --- 2. CARGA DE DATOS OPTIMIZADOS ---
+        // Recibimos las dos piezas del puzzle
+        const estaticos = JSON.parse('{{ estaciones_static|escapejs }}');
         const timeline = JSON.parse('{{ timeline_json|escapejs }}');
         
         if (!timeline || timeline.length === 0) {
-            console.warn("No hay datos históricos suficientes.");
+            console.warn("No hay datos históricos.");
         }
 
         const slider = document.getElementById('timeSlider');
         const reloj = document.getElementById('reloj');
         const btnPlay = document.getElementById('btnPlay');
         
-        // Configuramos el slider según la cantidad de datos
         if (timeline.length > 0) {
             slider.max = timeline.length - 1;
-            slider.value = timeline.length - 1; // Empezar en el final (ahora)
+            slider.value = timeline.length - 1; 
         }
 
+        // Inicializar Mapa
         const map = L.map('map').setView([41.6488, -0.8891], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
@@ -109,72 +106,72 @@
 
         let marcadores = {}; 
 
-        // --- 3. FUNCIÓN DE DIBUJADO ---
+        // --- 3. DIBUJADO DE ALTO RENDIMIENTO ---
         function dibujarFrame(index) {
             if (!timeline[index]) return;
 
             const frame = timeline[index];
-            reloj.innerText = frame.hora_legible;
+            const lecturas = frame.d; // El diccionario comprimido {'id': [bicis, anclajes]}
             
-            const favoritos = getFavoritos(); // Obtenemos favoritos actualizados
+            reloj.innerText = frame.ts; // Hora
+            
+            const favoritos = getFavoritos();
 
-            frame.datos.forEach(estacion => {
-                // Lógica de colores semáforo
+            // Iteramos sobre los IDs de las estaciones que tenemos en los datos estáticos
+            // (Usamos Object.keys para recorrer el diccionario estático, que es el maestro)
+            Object.keys(estaticos).forEach(id => {
+                const info = estaticos[id];     // Datos fijos (Nombre, Lat, Lon)
+                const datos = lecturas[id];     // Datos cambiantes [Bicis, Anclajes]
+
+                // Si por lo que sea no hay datos para esta estación en este frame, saltamos
+                if (!datos) return;
+
+                const bicis = datos[0];
+                const anclajes = datos[1];
+
+                // Lógica de visualización
                 let color;
-                if (estacion.bicis === 0) {
-                    color = '#dc3545'; // Rojo
-                } else if (estacion.bicis <= 2) {
-                    color = '#fd7e14'; // Naranja
-                } else {
-                    color = '#198754'; // Verde
-                }
+                if (bicis === 0) color = '#dc3545';
+                else if (bicis <= 2) color = '#fd7e14';
+                else color = '#198754';
                 
-                // Calcular tamaño
-                const radio = (estacion.bicis === 0) ? 6 : 6 + (estacion.bicis / 5);
-                
-                // Verificar si es favorito
-                const esFavorito = favoritos.includes(String(estacion.id));
-                const corazon = esFavorito ? '❤️' : '🤍';
-                const bordeColor = esFavorito ? '#ff0000' : '#fff'; // Borde rojo si es fav
+                const radio = (bicis === 0) ? 6 : 6 + (bicis / 5);
+                const esFavorito = favoritos.includes(String(id));
+                const bordeColor = esFavorito ? '#ff0000' : '#fff';
                 const bordeGrosor = esFavorito ? 3 : 1;
 
-                // Contenido HTML del Popup
-                const contenidoPopup = `
+                // Solo generamos el HTML del popup si el usuario hace clic (Lazy load del string)
+                // Pero Leaflet necesita el bindPopup antes. Lo hacemos simple:
+                const popupContent = `
                     <div class="text-center" style="min-width: 150px;">
-                        <h6 class="fw-bold mb-2">${estacion.nombre}</h6>
-                        
+                        <h6 class="fw-bold mb-2">${info.nombre}</h6>
                         <div class="d-flex justify-content-center gap-2 mb-3">
-                            <span class="badge bg-success">🚲 ${estacion.bicis}</span>
-                            <span class="badge bg-secondary">🅿️ ${estacion.anclajes}</span>
+                            <span class="badge bg-success">🚲 ${bicis}</span>
+                            <span class="badge bg-secondary">🅿️ ${anclajes}</span>
                         </div>
-
                         <div class="d-grid gap-2">
-                            <a href="${estacion.url_detalle}" class="btn btn-primary btn-sm text-white text-decoration-none">
+                            <a href="${info.url}" class="btn btn-primary btn-sm text-white text-decoration-none">
                                 Ver Historial 📊
                             </a>
-                            <button onclick="window.toggleMapFavorito('${estacion.id}')" class="btn btn-sm btn-outline-secondary">
-                                ${corazon} Favorito
+                            <button onclick="window.toggleMapFavorito('${id}')" class="btn btn-sm btn-outline-secondary">
+                                ${esFavorito ? '❤️' : '🤍'} Favorito
                             </button>
                         </div>
                     </div>
                 `;
 
-                if (marcadores[estacion.id]) {
-                    // ACTUALIZAR EXISTENTE
-                    marcadores[estacion.id].setStyle({
+                // Actualizar o Crear Marcador
+                if (marcadores[id]) {
+                    marcadores[id].setStyle({
                         fillColor: color,
                         radius: radio,
-                        color: bordeColor,   // Actualizamos borde (si cambia fav)
+                        color: bordeColor,
                         weight: bordeGrosor
                     });
-                    
-                    // IMPORTANTE: Aquí estaba el error en tu código anterior.
-                    // Pasamos la variable directamente, no una string de código.
-                    marcadores[estacion.id].setPopupContent(contenidoPopup);
-
+                    // Leaflet permite actualizar el contenido del popup dinámicamente
+                    marcadores[id].setPopupContent(popupContent);
                 } else {
-                    // CREAR NUEVO
-                    const circle = L.circleMarker([estacion.lat, estacion.lon], {
+                    const circle = L.circleMarker([info.lat, info.lon], {
                         radius: radio,
                         fillColor: color,
                         color: bordeColor,
@@ -183,8 +180,8 @@
                         fillOpacity: 0.8
                     }).addTo(map);
                     
-                    circle.bindPopup(contenidoPopup);
-                    marcadores[estacion.id] = circle;
+                    circle.bindPopup(popupContent);
+                    marcadores[id] = circle;
                 }
             });
         }
@@ -194,26 +191,21 @@
             dibujarFrame(this.value);
         });
 
-        // Carga inicial
         if (timeline.length > 0) {
             dibujarFrame(slider.value);
         }
 
-        // Lógica Play/Pausa
         let intervalo = null;
         btnPlay.addEventListener('click', function() {
             if (intervalo) {
-                // PAUSAR
                 clearInterval(intervalo);
                 intervalo = null;
                 btnPlay.innerHTML = "▶ Reproducir";
                 btnPlay.classList.replace('btn-danger', 'btn-primary');
             } else {
-                // REPRODUCIR
-                if (parseInt(slider.value) === timeline.length - 1) {
-                    slider.value = 0; // Rebobinar si está al final
+                if (parseInt(slider.value) >= timeline.length - 1) {
+                    slider.value = 0;
                 }
-                
                 btnPlay.innerHTML = "⏸ Pausa";
                 btnPlay.classList.replace('btn-primary', 'btn-danger');
 
@@ -221,15 +213,15 @@
                     let val = parseInt(slider.value);
                     if (val < timeline.length - 1) {
                         slider.value = val + 1;
-                        dibujarFrame(slider.value);
+                        // Usamos requestAnimationFrame para suavidad visual
+                        requestAnimationFrame(() => dibujarFrame(slider.value));
                     } else {
-                        // FIN
                         clearInterval(intervalo);
                         intervalo = null;
                         btnPlay.innerHTML = "▶ Reproducir";
                         btnPlay.classList.replace('btn-danger', 'btn-primary');
                     }
-                }, 150); // Velocidad (ms)
+                }, 100); // 100ms es muy fluido para sampling x2
             }
         });
     </script>

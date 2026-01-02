@@ -152,49 +152,63 @@ def detalle_estacion(request, estacion_id):
 
 def mapa_estaciones(request):
     """
-    Mapa animado: Muestra la evolución de las últimas 24 horas.
+    Mapa animado ULTRA OPTIMIZADO.
+    Separa datos estáticos de dinámicos y reduce la resolución temporal.
     """
-    # --- CAMBIO CRÍTICO: 24H REALES ---
     hace_24h = timezone.now() - timedelta(hours=24)
     
-    # 1. Filtramos por TIEMPO, no por LÍMITE [:50]
-    # Esto traerá aprox 380 capturas (si funciona el cron correctamente)
-    capturas = Captura.objects.filter(
+    # 1. DATOS ESTÁTICOS (Se envían 1 sola vez)
+    # Diccionario: { id_externo: { lat, lon, nombre, url } }
+    estaciones_objs = Estacion.objects.all()
+    estaciones_static = {}
+    
+    for e in estaciones_objs:
+        estaciones_static[e.id_externo] = {
+            'lat': float(e.latitud),
+            'lon': float(e.longitud),
+            'nombre': e.nombre,
+            'url': reverse('detalle_estacion', args=[e.id_externo])
+        }
+
+    # 2. DATOS DINÁMICOS (Capturas)
+    # Filtramos últimas 24h
+    capturas_qs = Captura.objects.filter(
         timestamp__gte=hace_24h
-    ).order_by('timestamp') # Orden cronológico (antiguo -> nuevo) para la animación
+    ).order_by('timestamp')
+    
+    # OPTIMIZACIÓN A: Sampling (Tomar 1 de cada 2 para reducir carga a la mitad)
+    # Si tienes muchos datos, el ojo humano no distingue cambios cada 3 min en un mapa rápido.
+    # [::2] significa "coge el 0, el 2, el 4..."
+    capturas = list(capturas_qs)[::2] 
     
     timeline_data = []
     
     for c in capturas:
         fecha_local = timezone.localtime(c.timestamp)
-
-        # Optimizamos query: values() es más rápido que crear objetos modelo si solo leemos
-        # Pero para mantener compatibilidad con tu template JS, usaremos el formato esperado.
-        estado_estaciones = []
         
-        # select_related es vital aquí para no hacer 130 queries por cada frame
-        qs = c.lecturas.select_related('estacion').all()
+        # OPTIMIZACIÓN B: Values List (Mucho más rápido que objetos)
+        # Solo traemos los enteros necesarios: Estación ID, Bicis, Anclajes
+        lecturas_data = c.lecturas.values_list(
+            'estacion__id_externo', 
+            'bicis_disponibles', 
+            'anclajes_libres'
+        )
         
-        for l in qs:
-            estado_estaciones.append({
-                'id': l.estacion.id_externo,
-                'lat': float(l.estacion.latitud),
-                'lon': float(l.estacion.longitud),
-                'nombre': l.estacion.nombre,
-                'bicis': l.bicis_disponibles,
-                'anclajes': l.anclajes_libres,
-                'url_detalle': reverse('detalle_estacion', args=[l.estacion.id_externo])
-            })
+        # Convertimos la QuerySet a un diccionario ligero para JS
+        # Formato: { '1': [10, 5], '2': [0, 20] ... } -> ID: [Bicis, Anclajes]
+        lecturas_dict = {
+            str(item[0]): [item[1], item[2]] 
+            for item in lecturas_data
+        }
             
         timeline_data.append({
-            'timestamp': c.timestamp.isoformat(),
-            'hora_legible': fecha_local.strftime("%H:%M"),
-            'datos': estado_estaciones
+            'ts': fecha_local.strftime("%H:%M"), # Hora legible
+            'd': lecturas_dict                   # Datos comprimidos
         })
 
-    # IMPORTANTE: timeline_json puede pesar unos 4-5MB con 24h de datos.
-    # Si tarda en cargar, avísame y filtraremos para enviar solo 1 de cada 2 frames.
     context = {
-        'timeline_json': json.dumps(list(timeline_data), cls=DjangoJSONEncoder)
+        # Pasamos los dos bloques de datos por separado
+        'estaciones_static': json.dumps(estaciones_static, cls=DjangoJSONEncoder),
+        'timeline_json': json.dumps(timeline_data, cls=DjangoJSONEncoder)
     }
     return render(request, 'core/mapa_estaciones.html', context)
