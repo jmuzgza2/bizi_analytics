@@ -1,159 +1,184 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Mapa Temporal</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+{% extends 'core/base.html' %}
+
+{% block title %}Bizi Zaragoza - Mapa del Tiempo{% endblock %}
+
+{% block extra_css %}
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        #map { height: 600px; width: 100%; border-radius: 8px; }
-        .control-panel { background: rgba(255,255,255,0.9); padding: 15px; border-radius: 8px; margin-top: -15px; position: relative; z-index: 999; border: 1px solid #ddd;}
+        #map { 
+            height: 600px; 
+            width: 100%; 
+            border-radius: 8px; 
+            z-index: 1; /* Asegurar que queda por debajo del menú si este se despliega */
+        }
+        .control-panel { 
+            background: rgba(255,255,255,0.95); 
+            padding: 15px; 
+            border-radius: 12px; 
+            margin-top: -20px; 
+            position: relative; 
+            z-index: 400; /* Por encima del mapa Leaflet */
+            border: 1px solid #dee2e6;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
     </style>
-</head>
-<body class="bg-light">
+{% endblock %}
 
-    <nav class="navbar navbar-dark bg-primary shadow mb-4" 
-         style="background: linear-gradient(135deg, #0b5ed7 0%, #052c65 100%);">
-        
-        <div class="container d-flex flex-column flex-lg-row align-items-center">
-            
-            <a class="navbar-brand d-flex align-items-center gap-3 mb-3 mb-lg-0 me-lg-auto" href="{% url 'lista_estaciones' %}">
-                
-                <div class="bg-white text-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" 
-                     style="width: 50px; height: 50px; flex-shrink: 0;">
-                    <span style="font-size: 1.8rem; margin-bottom: 3px;">🚲</span>
-                </div>
-
-                <div class="d-flex flex-column">
-                    <span class="fw-bold text-white lh-1" style="font-size: 1.5rem; letter-spacing: -0.5px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">
-                        HabemusBizi
-                    </span>
-                    <span class="text-white-50" style="font-size: 0.85rem; letter-spacing: 1px;">
-                        by <span class="fw-bold text-white" style="color: #e0efff !important; text-transform: uppercase;">jmmesa</span>
-                    </span>
-                </div>
-            </a>
-
-            <div class="d-flex gap-2 justify-content-center flex-wrap">
-                
-                {% with url_name=request.resolver_match.url_name %}
-                
-                <a href="{% url 'lista_estaciones' %}" 
-                   class="btn {% if url_name == 'lista_estaciones' %}btn-light text-primary{% else %}btn-outline-light{% endif %} fw-bold px-3 rounded-pill shadow-sm d-flex align-items-center gap-2">
-                    📋 Lista
-                </a>
-                
-                <a href="{% url 'mapa_estaciones' %}" 
-                   class="btn {% if url_name == 'mapa_estaciones' %}btn-light text-primary{% else %}btn-outline-light{% endif %} fw-bold px-3 rounded-pill shadow-sm d-flex align-items-center gap-2">
-                    ⏱️ Mapa
-                </a>
-
-                {% endwith %}
-
-            </div>
-        </div>
-    </nav>
-
-    <div class="container">
+{% block content %}
+<div class="container">
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <h3>Evolución Temporal</h3>
-        
-        <div class="card p-2 shadow-sm">
-            <div id="map"></div>
-        </div>
-
-        <div class="control-panel shadow mt-3 text-center">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <button id="btnPlay" class="btn btn-primary">▶ Reproducir</button>
-                <h4 id="reloj" class="m-0 fw-bold text-primary">--:--</h4>
-            </div>
-            
-            <input type="range" class="form-range" id="timeSlider" min="0" max="100" step="1" value="0">
-            <small class="text-muted">Arrastra para viajar en el tiempo</small>
-        </div>
+        <span class="badge bg-primary">Últimas 24h</span>
+    </div>
+    
+    <div class="card p-1 shadow-sm border-0">
+        <div id="map"></div>
     </div>
 
+    <div class="control-panel shadow text-center">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <button id="btnPlay" class="btn btn-primary rounded-pill px-4">
+                ▶ Reproducir
+            </button>
+            <h4 id="reloj" class="m-0 fw-bold text-primary font-monospace">--:--</h4>
+        </div>
+        
+        <input type="range" class="form-range" id="timeSlider" min="0" max="100" step="1" value="0">
+        <div class="d-flex justify-content-between text-muted small mt-1">
+            <span>Pasado</span>
+            <span>Ahora</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // 1. CARGAR DATOS
-        const timeline = JSON.parse('{{ timeline_json|escapejs }}');
-        
-        if (timeline.length === 0) {
-            alert("No hay datos históricos suficientes.");
+        // --- 1. GESTIÓN DE FAVORITOS (LOCALSTORAGE) ---
+        // Copiamos la lógica para que el mapa sepa qué estaciones son favoritas
+        const STORAGE_KEY = 'bizi_favoritos_lista';
+
+        function getFavoritos() {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
         }
 
-        // Configurar el Slider
+        // Función global para que el botón dentro del Popup pueda llamarla
+        window.toggleMapFavorito = function(id) {
+            let favs = getFavoritos();
+            const idStr = String(id);
+            
+            if (favs.includes(idStr)) {
+                favs = favs.filter(f => f !== idStr); // Quitar
+            } else {
+                favs.push(idStr); // Añadir
+            }
+            
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
+            
+            // Redibujamos el frame actual para que el icono del corazón cambie al instante
+            const slider = document.getElementById('timeSlider');
+            dibujarFrame(slider.value); 
+        };
+
+        // --- 2. CONFIGURACIÓN DEL MAPA ---
+        const timeline = JSON.parse('{{ timeline_json|escapejs }}');
+        
+        if (!timeline || timeline.length === 0) {
+            console.warn("No hay datos históricos suficientes.");
+        }
+
         const slider = document.getElementById('timeSlider');
         const reloj = document.getElementById('reloj');
         const btnPlay = document.getElementById('btnPlay');
         
-        slider.max = timeline.length - 1;
-        slider.value = timeline.length - 1; // Empezar en el último (ahora)
+        // Configuramos el slider según la cantidad de datos
+        if (timeline.length > 0) {
+            slider.max = timeline.length - 1;
+            slider.value = timeline.length - 1; // Empezar en el final (ahora)
+        }
 
-        // 2. INICIALIZAR MAPA
         const map = L.map('map').setView([41.6488, -0.8891], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: 'OpenStreetMap'
+            attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // Almacén de marcadores (Diccionario ID -> Objeto Marcador Leaflet)
-        // Esto es clave: No borramos y creamos marcadores, solo ACTUALIZAMOS sus propiedades. Es mucho más rápido.
         let marcadores = {}; 
 
-        // Función para dibujar un instante concreto (frame)
+        // --- 3. FUNCIÓN DE DIBUJADO ---
         function dibujarFrame(index) {
+            if (!timeline[index]) return;
+
             const frame = timeline[index];
-            reloj.innerText = frame.hora_legible; // Actualizar reloj
+            reloj.innerText = frame.hora_legible;
             
+            const favoritos = getFavoritos(); // Obtenemos favoritos actualizados
+
             frame.datos.forEach(estacion => {
+                // Lógica de colores semáforo
                 let color;
                 if (estacion.bicis === 0) {
-                    color = '#D50000'; // Rojo (0 bicis)
+                    color = '#dc3545'; // Rojo
                 } else if (estacion.bicis <= 2) {
-                    color = '#fd7e14'; // Naranja (1 o 2 bicis)
+                    color = '#fd7e14'; // Naranja
                 } else {
-                    color = '#198754'; // Verde (> 2 bicis)
+                    color = '#198754'; // Verde
                 }
-                const radio = (estacion.bicis === 0) ? 6 : 6 + (estacion.bicis / 5); // Círculos más grandes si hay muchas bicis
+                
+                // Calcular tamaño
+                const radio = (estacion.bicis === 0) ? 6 : 6 + (estacion.bicis / 5);
+                
+                // Verificar si es favorito
+                const esFavorito = favoritos.includes(String(estacion.id));
+                const corazon = esFavorito ? '❤️' : '🤍';
+                const bordeColor = esFavorito ? '#ff0000' : '#fff'; // Borde rojo si es fav
+                const bordeGrosor = esFavorito ? 3 : 1;
 
-                // --- NUEVO: Generamos el contenido del popup en una variable para no repetirlo ---
+                // Contenido HTML del Popup
                 const contenidoPopup = `
-                    <div class="text-center">
+                    <div class="text-center" style="min-width: 150px;">
                         <h6 class="fw-bold mb-2">${estacion.nombre}</h6>
                         
-                        <div class="d-flex justify-content-center gap-3 mb-3">
-                            <span class="badge bg-success fs-6">
-                                🚲 ${estacion.bicis}
-                            </span>
-                            <span class="badge bg-secondary fs-6">
-                                🅿️ ${estacion.anclajes}
-                            </span>
+                        <div class="d-flex justify-content-center gap-2 mb-3">
+                            <span class="badge bg-success">🚲 ${estacion.bicis}</span>
+                            <span class="badge bg-secondary">🅿️ ${estacion.anclajes}</span>
                         </div>
 
-                        <a href="${estacion.url_detalle}" class="btn btn-primary btn-sm w-100 text-white" style="text-decoration:none;">
-                            Ver Historial 📊
-                        </a>
+                        <div class="d-grid gap-2">
+                            <a href="${estacion.url_detalle}" class="btn btn-primary btn-sm text-white text-decoration-none">
+                                Ver Historial 📊
+                            </a>
+                            <button onclick="window.toggleMapFavorito('${estacion.id}')" class="btn btn-sm btn-outline-secondary">
+                                ${corazon} Favorito
+                            </button>
+                        </div>
                     </div>
                 `;
 
-
-
-                // Si el marcador ya existe, lo actualizamos
                 if (marcadores[estacion.id]) {
+                    // ACTUALIZAR EXISTENTE
                     marcadores[estacion.id].setStyle({
                         fillColor: color,
-                        radius: radio
+                        radius: radio,
+                        color: bordeColor,   // Actualizamos borde (si cambia fav)
+                        weight: bordeGrosor
                     });
-                    // Actualizamos el popup también
-                    marcadores[estacion.id].setPopupContent(`
-                       marcadores[estacion.id].setPopupContent(contenidoPopup);
-                    `);
+                    
+                    // IMPORTANTE: Aquí estaba el error en tu código anterior.
+                    // Pasamos la variable directamente, no una string de código.
+                    marcadores[estacion.id].setPopupContent(contenidoPopup);
+
                 } else {
-                    // Si es la primera vez (frame 0), lo creamos
+                    // CREAR NUEVO
                     const circle = L.circleMarker([estacion.lat, estacion.lon], {
                         radius: radio,
                         fillColor: color,
-                        color: "#fff",
-                        weight: 1,
+                        color: bordeColor,
+                        weight: bordeGrosor,
                         opacity: 1,
                         fillOpacity: 0.8
                     }).addTo(map);
@@ -164,33 +189,32 @@
             });
         }
 
-        // 3. EVENTOS
-        
-        // Al mover el slider
+        // --- 4. EVENTOS ---
         slider.addEventListener('input', function() {
             dibujarFrame(this.value);
         });
 
-        // Inicializar con el último dato
-        dibujarFrame(slider.value);
+        // Carga inicial
+        if (timeline.length > 0) {
+            dibujarFrame(slider.value);
+        }
 
-        // Lógica de Reproducción (Play)
+        // Lógica Play/Pausa
         let intervalo = null;
         btnPlay.addEventListener('click', function() {
             if (intervalo) {
-                // Si ya está sonando, pausar
+                // PAUSAR
                 clearInterval(intervalo);
                 intervalo = null;
-                btnPlay.innerText = "▶ Reproducir";
+                btnPlay.innerHTML = "▶ Reproducir";
                 btnPlay.classList.replace('btn-danger', 'btn-primary');
             } else {
-                // Empezar
-                // Si estamos al final, rebobinar al principio
+                // REPRODUCIR
                 if (parseInt(slider.value) === timeline.length - 1) {
-                    slider.value = 0;
+                    slider.value = 0; // Rebobinar si está al final
                 }
                 
-                btnPlay.innerText = "⏸ Pausa";
+                btnPlay.innerHTML = "⏸ Pausa";
                 btnPlay.classList.replace('btn-primary', 'btn-danger');
 
                 intervalo = setInterval(() => {
@@ -199,15 +223,14 @@
                         slider.value = val + 1;
                         dibujarFrame(slider.value);
                     } else {
-                        // Fin de la cinta
+                        // FIN
                         clearInterval(intervalo);
                         intervalo = null;
-                        btnPlay.innerText = "▶ Reproducir";
+                        btnPlay.innerHTML = "▶ Reproducir";
                         btnPlay.classList.replace('btn-danger', 'btn-primary');
                     }
-                }, 200); // 200ms por frame (velocidad de animación)
+                }, 150); // Velocidad (ms)
             }
         });
     </script>
-</body>
-</html>
+{% endblock %}

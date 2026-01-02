@@ -1,103 +1,57 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Bizi Zaragoza - Lista</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-</head>
-<body class="bg-light">
+{% extends 'core/base.html' %}
 
-    <nav class="navbar navbar-dark bg-primary shadow mb-4" 
-         style="background: linear-gradient(135deg, #0b5ed7 0%, #052c65 100%);">
-        
-        <div class="container d-flex flex-column flex-lg-row align-items-center">
-            
-            <a class="navbar-brand d-flex align-items-center gap-3 mb-3 mb-lg-0 me-lg-auto" href="{% url 'lista_estaciones' %}">
-                
-                <div class="bg-white text-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" 
-                     style="width: 50px; height: 50px; flex-shrink: 0;">
-                    <span style="font-size: 1.8rem; margin-bottom: 3px;">🚲</span>
-                </div>
+{% block title %}Bizi Zaragoza - Lista{% endblock %}
 
-                <div class="d-flex flex-column">
-                    <span class="fw-bold text-white lh-1" style="font-size: 1.5rem; letter-spacing: -0.5px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">
-                        HabemusBizi
-                    </span>
-                    <span class="text-white-50" style="font-size: 0.85rem; letter-spacing: 1px;">
-                        by <span class="fw-bold text-white" style="color: #e0efff !important; text-transform: uppercase;">jmmesa</span>
-                    </span>
-                </div>
-            </a>
-
-            <div class="d-flex gap-2 justify-content-center flex-wrap">
-                
-                {% with url_name=request.resolver_match.url_name %}
-                
-                <a href="{% url 'lista_estaciones' %}" 
-                   class="btn {% if url_name == 'lista_estaciones' %}btn-light text-primary{% else %}btn-outline-light{% endif %} fw-bold px-3 rounded-pill shadow-sm d-flex align-items-center gap-2">
-                    📋 Lista
-                </a>
-                
-                <a href="{% url 'mapa_estaciones' %}" 
-                   class="btn {% if url_name == 'mapa_estaciones' %}btn-light text-primary{% else %}btn-outline-light{% endif %} fw-bold px-3 rounded-pill shadow-sm d-flex align-items-center gap-2">
-                    ⏱️ Mapa
-                </a>
-
-                {% endwith %}
-
-            </div>
-        </div>
-    </nav>
-
-    <div class="container">
-        
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Estaciones</h2>
-            <button id="btnToggleFavs" class="btn btn-outline-danger">
-                ❤️ Ver solo Favoritos
-            </button>
-        </div>
-
-        <div class="row mb-4">
-            <div class="col-md-12">
-                <div class="input-group input-group-lg">
-                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                    <input type="text" id="buscador" class="form-control" placeholder="Buscar estación por nombre o número...">
-                </div>
-            </div>
-        </div>
-        
-        <div class="list-group mt-3" id="lista-estaciones">
-            {% for estacion in estaciones %}
-            <div class="list-group-item list-group-item-action d-flex align-items-center item-estacion"
-                 data-id="{{ estacion.id_externo }}"
-                 data-search="{{ estacion.id_externo }} {{ estacion.nombre|lower }}">
-                
-                <button class="btn btn-sm btn-outline-secondary btn-fav me-3" 
-                        data-id="{{ estacion.id_externo }}" 
-                        style="min-width: 40px; border-color: #ced4da;"> 🤍
-                    🤍
-                </button>
-                
-                <a href="{% url 'detalle_estacion' estacion.id_externo %}" 
-                   class="text-decoration-none text-dark flex-grow-1 d-flex justify-content-between align-items-center">
-                    
-                    <div>
-                        <span class="badge bg-secondary me-2">{{ estacion.id_externo }}</span>
-                        <span class="fw-bold">{{ estacion.nombre }}</span>
-                    </div>
-                    
-                    <i class="bi bi-chevron-right text-muted"></i>
-                </a>
-
-            </div>
-            {% endfor %}
-        </div>
+{% block content %}
+<div class="container">
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Estaciones</h2>
+        <button id="btnToggleFavs" class="btn btn-outline-danger">
+            ❤️ Ver solo Favoritos
+        </button>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="input-group input-group-lg">
+                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                <input type="text" id="buscador" class="form-control" placeholder="Buscar estación por nombre o número...">
+            </div>
+        </div>
+    </div>
+    
+    <div class="list-group mt-3" id="lista-estaciones">
+        {% for estacion in estaciones %}
+        <div class="list-group-item list-group-item-action d-flex align-items-center item-estacion"
+             data-id="{{ estacion.id_externo }}"
+             data-search="{{ estacion.id_externo }} {{ estacion.nombre|lower }}">
+            
+            <button class="btn btn-sm btn-outline-secondary btn-fav me-3" 
+                    data-id="{{ estacion.id_externo }}" 
+                    style="min-width: 40px; border-color: #ced4da;"> 
+                🤍
+            </button>
+            
+            <a href="{% url 'detalle_estacion' estacion.id_externo %}" 
+               class="text-decoration-none text-dark flex-grow-1 d-flex justify-content-between align-items-center">
+                
+                <div>
+                    <span class="badge bg-secondary me-2">{{ estacion.id_externo }}</span>
+                    <span class="fw-bold">{{ estacion.nombre }}</span>
+                </div>
+                
+                <i class="bi bi-chevron-right text-muted"></i>
+            </a>
 
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const STORAGE_KEY = 'bizi_favoritos_lista';
@@ -116,22 +70,17 @@
             }
 
             // --- 2. FUNCIÓN MAESTRA DE FILTRADO ---
-            // Esta función decide qué se muestra y qué no, combinando buscador y favoritos
             function aplicarFiltros() {
                 const termino = inputBuscador.value.toLowerCase();
                 const favs = getFavoritos();
                 const items = document.querySelectorAll('.item-estacion');
 
                 items.forEach(item => {
-                    const searchData = item.getAttribute('data-search'); // ID + Nombre
+                    const searchData = item.getAttribute('data-search');
                     const id = item.getAttribute('data-id');
                     const esFav = favs.includes(id);
 
-                    // Condición 1: ¿Coincide con el texto del buscador?
                     const coincideBusqueda = searchData.includes(termino);
-                    
-                    // Condición 2: ¿Debemos mostrarlo según el filtro de favoritos?
-                    // (Si el filtro está apagado, mostramos todo. Si está encendido, solo si es fav)
                     const pasaFiltroFav = !mostrandoSoloFavoritos || esFav;
 
                     if (coincideBusqueda && pasaFiltroFav) {
@@ -143,32 +92,18 @@
             }
 
             // --- 3. ACTUALIZAR ICONOS DE CORAZÓN ---
-            // --- 3. ACTUALIZAR ICONOS DE CORAZÓN ---
             function pintarCorazones() {
                 const favs = getFavoritos();
                 document.querySelectorAll('.btn-fav').forEach(btn => {
                     const id = btn.getAttribute('data-id');
                     
                     if (favs.includes(id)) {
-                        // ESTADO: FAVORITO ACTIVO ❤️
-                        // Quitamos el gris
                         btn.classList.remove('btn-outline-secondary'); 
-                        
-                        // Ponemos el estilo "Outline Danger" (Borde rojo, fondo transparente)
                         btn.classList.add('btn-outline-danger'); 
-                        
-                        // Opcional: Si quieres quitar el borde rojo y dejar SOLO el corazón:
-                        // btn.style.border = "none"; 
-                        
                         btn.innerHTML = '❤️';
                     } else {
-                        // ESTADO: NO FAVORITO 🤍
-                        // Quitamos el rojo
                         btn.classList.remove('btn-outline-danger');
-                        
-                        // Ponemos el gris
                         btn.classList.add('btn-outline-secondary');
-                        
                         btn.innerHTML = '🤍';
                     }
                 });
@@ -176,10 +111,9 @@
 
             // --- 4. EVENTOS ---
 
-            // A. Clic en botón "Ver solo favoritos"
+            // A. Botón Toggle Favoritos
             btnToggle.addEventListener('click', function() {
                 mostrandoSoloFavoritos = !mostrandoSoloFavoritos;
-                
                 if (mostrandoSoloFavoritos) {
                     this.classList.add('active', 'btn-danger');
                     this.classList.remove('btn-outline-danger');
@@ -192,71 +126,32 @@
                 aplicarFiltros();
             });
 
-            // B. Escribir en el buscador
+            // B. Buscador
             inputBuscador.addEventListener('keyup', aplicarFiltros);
 
-            // C. Clic en los corazones individuales
+            // C. Clic en corazones
             document.querySelectorAll('.btn-fav').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const id = this.getAttribute('data-id');
                     let favs = getFavoritos();
 
                     if (favs.includes(id)) {
-                        favs = favs.filter(f => f !== id); // Quitar
+                        favs = favs.filter(f => f !== id);
                     } else {
-                        favs.push(id); // Añadir
+                        favs.push(id);
                     }
 
                     saveFavoritos(favs);
                     pintarCorazones();
                     
-                    // Si estamos filtrando, al quitar un favorito debe desaparecer al instante
                     if (mostrandoSoloFavoritos) {
                         aplicarFiltros();
                     }
                 });
             });
 
-            // Inicialización
+            // Carga inicial
             pintarCorazones();
         });
     </script>
-
-    <script>
-        const canvasGrafico = document.getElementById('graficoGlobal');
-        
-        if (canvasGrafico) { // Solo ejecutamos si el elemento existe en el HTML
-            const ctxGlobal = canvasGrafico.getContext('2d');
-            const datosCiudad = JSON.parse('{{ datos_globales|escapejs }}');
-
-            new Chart(ctxGlobal, {
-                type: 'line',
-                data: {
-                    datasets: [{
-                        label: 'Bicis disponibles en todo Zaragoza',
-                        data: datosCiudad,
-                        borderColor: '#6610f2',
-                        backgroundColor: 'rgba(102, 16, 242, 0.1)',
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            title: { display: true, text: 'Total Bicis' }
-                        }
-                    }
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+{% endblock %}

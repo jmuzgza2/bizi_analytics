@@ -1,0 +1,38 @@
+<nav class="navbar navbar-dark bg-primary shadow mb-4 p-2" 
+     style="background: linear-gradient(135deg, #0b5ed7 0%, #052c65 100%);">
+    
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+        
+        <a class="navbar-brand d-flex align-items-center gap-2 p-0 me-0" href="{% url 'lista_estaciones' %}">
+            <div class="bg-white text-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" 
+                 style="width: 38px; height: 38px; flex-shrink: 0;">
+                <span style="font-size: 1.4rem; margin-bottom: 2px;">🚲</span>
+            </div>
+            <div class="d-flex flex-column justify-content-center">
+                <span class="fw-bold text-white lh-1" style="font-size: 1.2rem; letter-spacing: -0.5px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">
+                    HabemusBizi
+                </span>
+                <span class="text-white-50 d-none d-sm-block" style="font-size: 0.75rem;">
+                    by <span class="fw-bold text-white" style="text-transform: uppercase;">jmmesa</span>
+                </span>
+            </div>
+        </a>
+
+        <div class="d-flex gap-1">
+            {% with url_name=request.resolver_match.url_name %}
+            
+            <a href="{% url 'lista_estaciones' %}" 
+               class="btn {% if url_name == 'lista_estaciones' %}btn-light text-primary{% else %}btn-outline-light{% endif %} btn-sm fw-bold px-2 rounded-pill shadow-sm d-flex align-items-center">
+                <span class="fs-6 me-1">📋</span> <span class="d-none d-sm-inline" style="font-size: 0.9rem;">Lista</span>
+                </a>
+            
+            <a href="{% url 'mapa_estaciones' %}" 
+               class="btn {% if url_name == 'mapa_estaciones' %}btn-light text-primary{% else %}btn-outline-light{% endif %} btn-sm fw-bold px-2 rounded-pill shadow-sm d-flex align-items-center">
+                <span class="fs-6 me-1">⏱️</span> <span class="d-none d-sm-inline" style="font-size: 0.9rem;">Mapa</span>
+            </a>
+
+            
+            {% endwith %}
+        </div>
+    </div>
+</nav>
