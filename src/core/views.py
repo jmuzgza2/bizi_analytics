@@ -224,55 +224,75 @@ def planificador(request):
             
             obj_o, obj_d = Estacion.objects.get(id_externo=o_id), Estacion.objects.get(id_externo=d_id)
             
-            # 1. CÁLCULO DE VIAJE Y DISTANCIA (Corregido)
+            # 1. CÁLCULO DE VIAJE
             dist_metros = haversine(float(obj_o.latitud), float(obj_o.longitud), float(obj_d.latitud), float(obj_d.longitud))
-            dist_real = dist_metros * 1.4 # Factor de callejeo
-            mins_viaje = max(5, int(dist_real / 200)) # 12km/h = 200m/min
+            dist_real = dist_metros * 1.4 
+            mins_viaje = max(5, int(dist_real / 200)) 
             
-            # 2. CÁLCULO DE LLEGADA
+            # 2. LLEGADA
             llegada = datetime.datetime(2024,1,1,hora,minuto) + timedelta(minutes=mins_viaje)
             dia_llegada = dia + 1 if llegada.day != 1 else dia
             if dia_llegada > 7: dia_llegada = 1
 
-            # 3. PREDICCIONES
+            # 3. PREDICCIONES (HISTÓRICO)
             do = calcular_prediccion_precisa(o_id, dia, hora, minuto)
             dd = calcular_prediccion_precisa(d_id, dia_llegada, llegada.hour, llegada.minute)
             
-            # 4. SUGERENCIAS (Alternativas si probabilidad < 40%)
+            # --- NUEVO: DATOS REALES (AHORA MISMO) ---
+            # Buscamos la última lectura real para mostrar el estado actual
+            ult_captura = Captura.objects.order_by('-timestamp').last()
+            lectura_o = None
+            lectura_d = None
+            
+            if ult_captura:
+                lectura_o = LecturaEstacion.objects.filter(captura=ult_captura, estacion=obj_o).first()
+                lectura_d = LecturaEstacion.objects.filter(captura=ult_captura, estacion=obj_d).first()
+
+            # Extraemos valores reales o guiones si no hay datos
+            real_o_bicis = lectura_o.bicis_disponibles if lectura_o else '-'
+            real_o_anclajes = lectura_o.anclajes_libres if lectura_o else '-'
+            
+            real_d_bicis = lectura_d.bicis_disponibles if lectura_d else '-'
+            real_d_anclajes = lectura_d.anclajes_libres if lectura_d else '-'
+            
+            # 4. SUGERENCIAS
             sugerencias_origen = []
             sugerencias_destino = []
-            # NOTA: Aquí usamos 'pct_bici_num' que es lo que devuelve la función de predicción
             if do and do['pct_bici_num'] < 40:
                 sugerencias_origen = buscar_alternativas(o_id, dia, hora, minuto, 'bici')
             if dd and dd['pct_hueco_num'] < 40:
                 sugerencias_destino = buscar_alternativas(d_id, dia_llegada, llegada.hour, llegada.minute, 'hueco')
 
-            # Manejo de vacíos (por si no hay histórico)
             if not do: do = {'nivel_bici': {'texto': 'Sin datos', 'clase': 'secondary', 'color': '#ccc', 'ancho': 0}, 'media_bicis': 0, 'tendencia': '-'}
             if not dd: dd = {'nivel_hueco': {'texto': 'Sin datos', 'clase': 'secondary', 'color': '#ccc', 'ancho': 0}, 'media_anclajes': 0, 'tendencia': '-'}
 
-            # 5. CONSTRUCCIÓN DEL RESULTADO
             res = {
                 'viaje': {
                     'minutos': mins_viaje, 
-                    'distancia_km': round(dist_real / 1000, 1), # <-- ¡AQUÍ ESTÁ LA DISTANCIA QUE FALTABA!
+                    'distancia_km': round(dist_real / 1000, 1),
                     'hora_salida': f"{hora:02}:{minuto:02}", 
                     'hora_llegada': f"{llegada.hour:02}:{llegada.minute:02}",
                     'cambio_dia': (dia_llegada != dia)
                 },
                 'origen': {
                     'nombre': obj_o.nombre, 
-                    'nivel': do['nivel_bici'], # Ya incluye texto, color y ancho
+                    'nivel': do['nivel_bici'],
                     'media': do['media_bicis'], 
                     'tendencia': do['tendencia'],
-                    'alternativas': sugerencias_origen
+                    'alternativas': sugerencias_origen,
+                    # Datos Reales
+                    'actual_bicis': real_o_bicis,
+                    'actual_anclajes': real_o_anclajes
                 },
                 'destino': {
                     'nombre': obj_d.nombre, 
                     'nivel': dd['nivel_hueco'], 
                     'media': dd['media_anclajes'], 
                     'tendencia': dd['tendencia'],
-                    'alternativas': sugerencias_destino
+                    'alternativas': sugerencias_destino,
+                    # Datos Reales
+                    'actual_bicis': real_d_bicis,
+                    'actual_anclajes': real_d_anclajes
                 }
             }
         except Exception as e:
