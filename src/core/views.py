@@ -234,13 +234,12 @@ def planificador(request):
             dia_llegada = dia + 1 if llegada.day != 1 else dia
             if dia_llegada > 7: dia_llegada = 1
 
-            # 3. PREDICCIONES (HISTÓRICO)
+            # 3. PREDICCIONES
             do = calcular_prediccion_precisa(o_id, dia, hora, minuto)
             dd = calcular_prediccion_precisa(d_id, dia_llegada, llegada.hour, llegada.minute)
             
-            # --- NUEVO: DATOS REALES (AHORA MISMO) ---
-            # Buscamos la última lectura real para mostrar el estado actual
-            ult_captura = Captura.objects.order_by('-timestamp').last()
+            # --- CORRECCIÓN: USAR .FIRST() PARA OBTENER EL DATO MÁS RECIENTE ---
+            ult_captura = Captura.objects.order_by('-timestamp').first()
             lectura_o = None
             lectura_d = None
             
@@ -248,7 +247,6 @@ def planificador(request):
                 lectura_o = LecturaEstacion.objects.filter(captura=ult_captura, estacion=obj_o).first()
                 lectura_d = LecturaEstacion.objects.filter(captura=ult_captura, estacion=obj_d).first()
 
-            # Extraemos valores reales o guiones si no hay datos
             real_o_bicis = lectura_o.bicis_disponibles if lectura_o else '-'
             real_o_anclajes = lectura_o.anclajes_libres if lectura_o else '-'
             
@@ -280,7 +278,6 @@ def planificador(request):
                     'media': do['media_bicis'], 
                     'tendencia': do['tendencia'],
                     'alternativas': sugerencias_origen,
-                    # Datos Reales
                     'actual_bicis': real_o_bicis,
                     'actual_anclajes': real_o_anclajes
                 },
@@ -290,7 +287,6 @@ def planificador(request):
                     'media': dd['media_anclajes'], 
                     'tendencia': dd['tendencia'],
                     'alternativas': sugerencias_destino,
-                    # Datos Reales
                     'actual_bicis': real_d_bicis,
                     'actual_anclajes': real_d_anclajes
                 }
@@ -308,7 +304,10 @@ def radar_carga(request):
     try: lat, lon = float(request.GET.get('lat')), float(request.GET.get('lon'))
     except: return JsonResponse({'error': 'Coords'}, status=400)
     candidatas = sorted([(haversine(lat, lon, float(e.latitud), float(e.longitud)), e) for e in Estacion.objects.all()], key=lambda x: x[0])[:3]
-    res, ult = [], Captura.objects.order_by('-timestamp').last()
+    
+    # --- CORRECCIÓN: USAR .FIRST() TAMBIÉN AQUÍ ---
+    res, ult = [], Captura.objects.order_by('-timestamp').first()
+    
     if ult:
         for dist, est in candidatas:
             act = LecturaEstacion.objects.filter(captura=ult, estacion=est).first()
