@@ -7,7 +7,7 @@
     
     <div class="text-center mb-4">
         <h2 class="fw-bold text-primary">🔮 Oráculo Bizi</h2>
-        <p class="text-muted">Calcula tus probabilidades de éxito basándote en la historia reciente.</p>
+        <p class="text-muted">Planifica tu viaje basándote en la historia reciente.</p>
     </div>
 
     <div class="row justify-content-center">
@@ -15,83 +15,56 @@
             
             <div class="card shadow-sm border-0 mb-5">
                 <div class="card-body p-4 bg-light rounded">
-                    <form method="get" class="row g-3">
+                    <form method="get" class="row g-3" id="formPlanificador">
                         
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <label class="form-label fw-bold">📍 Salgo de...</label>
-                            <select name="origen" class="form-select" required>
-                                <option value="">Elige estación...</option>
-                                {% for e in estaciones %}
-                                <option value="{{ e.id_externo }}" {% if form_data.origen == e.id_externo %}selected{% endif %}>
-                                    {{ e.id_externo }} - {{ e.nombre }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            <div class="input-group" onclick="openStationSelector('inputOrigen', 'hiddenOrigen', '¿Dónde empieza tu viaje?')">
+                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-geo-alt-fill text-danger"></i></span>
+                                <input type="text" id="inputOrigen" class="form-control bg-white border-start-0" 
+                                       placeholder="Toca para buscar origen..." readonly style="cursor: pointer;" required 
+                                       value="{{ resultado.origen.nombre|default:'' }}">
+                                <input type="hidden" name="origen" id="hiddenOrigen" value="{{ form_data.origen|default:'' }}">
+                            </div>
                         </div>
 
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <label class="form-label fw-bold">🏁 Voy a...</label>
-                            <select name="destino" class="form-select" required>
-                                <option value="">Elige estación...</option>
-                                {% for e in estaciones %}
-                                <option value="{{ e.id_externo }}" {% if form_data.destino == e.id_externo %}selected{% endif %}>
-                                    {{ e.id_externo }} - {{ e.nombre }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            <div class="input-group" onclick="openStationSelector('inputDestino', 'hiddenDestino', '¿Cuál es tu destino?')">
+                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-flag-fill text-success"></i></span>
+                                <input type="text" id="inputDestino" class="form-control bg-white border-start-0" 
+                                       placeholder="Toca para buscar destino..." readonly style="cursor: pointer;" required
+                                       value="{{ resultado.destino.nombre|default:'' }}">
+                                <input type="hidden" name="destino" id="hiddenDestino" value="{{ form_data.destino|default:'' }}">
+                            </div>
                         </div>
 
-                        <div class="col-md-5">
-                            <label class="form-label fw-bold">Día de la semana</label>
-                            <select name="dia" class="form-select" required>
-                                <option value="2" {% if form_data.dia == '2' %}selected{% endif %}>Lunes</option>
-                                <option value="3" {% if form_data.dia == '3' %}selected{% endif %}>Martes</option>
-                                <option value="4" {% if form_data.dia == '4' %}selected{% endif %}>Miércoles</option>
-                                <option value="5" {% if form_data.dia == '5' %}selected{% endif %}>Jueves</option>
-                                <option value="6" {% if form_data.dia == '6' %}selected{% endif %}>Viernes</option>
-                                <option value="7" {% if form_data.dia == '7' %}selected{% endif %}>Sábado</option>
-                                <option value="1" {% if form_data.dia == '1' %}selected{% endif %}>Domingo</option>
+                        <hr class="my-4">
+
+                        <div class="col-5">
+                            <label class="form-label fw-bold small text-uppercase">Día</label>
+                            <select name="dia" id="selectDia" class="form-select">
+                                <option value="2">Lunes</option>
+                                <option value="3">Martes</option>
+                                <option value="4">Miércoles</option>
+                                <option value="5">Jueves</option>
+                                <option value="6">Viernes</option>
+                                <option value="7">Sábado</option>
+                                <option value="1">Domingo</option>
                             </select>
                         </div>
-
-                        <div class="col-md-7">
-                            <label class="form-label fw-bold">Hora aproximada</label>
+                        <div class="col-7">
+                            <label class="form-label fw-bold small text-uppercase">Hora Salida Aprox.</label>
                             <div class="input-group">
-                                <select name="hora" class="form-select" required>
-                                    {% for i in "0123456789"|make_list %}
-                                        {% endfor %}
-                                    <option value="6" {% if form_data.hora == '6' %}selected{% endif %}>06</option>
-                                    <option value="7" {% if form_data.hora == '7' %}selected{% endif %}>07</option>
-                                    <option value="8" {% if form_data.hora == '8' %}selected{% endif %}>08</option>
-                                    <option value="9" {% if form_data.hora == '9' %}selected{% endif %}>09</option>
-                                    <option value="10" {% if form_data.hora == '10' %}selected{% endif %}>10</option>
-                                    <option value="11" {% if form_data.hora == '11' %}selected{% endif %}>11</option>
-                                    <option value="12" {% if form_data.hora == '12' %}selected{% endif %}>12</option>
-                                    <option value="13" {% if form_data.hora == '13' %}selected{% endif %}>13</option>
-                                    <option value="14" {% if form_data.hora == '14' %}selected{% endif %}>14</option>
-                                    <option value="15" {% if form_data.hora == '15' %}selected{% endif %}>15</option>
-                                    <option value="16" {% if form_data.hora == '16' %}selected{% endif %}>16</option>
-                                    <option value="17" {% if form_data.hora == '17' %}selected{% endif %}>17</option>
-                                    <option value="18" {% if form_data.hora == '18' %}selected{% endif %}>18</option>
-                                    <option value="19" {% if form_data.hora == '19' %}selected{% endif %}>19</option>
-                                    <option value="20" {% if form_data.hora == '20' %}selected{% endif %}>20</option>
-                                    <option value="21" {% if form_data.hora == '21' %}selected{% endif %}>21</option>
-                                    <option value="22" {% if form_data.hora == '22' %}selected{% endif %}>22</option>
-                                    <option value="23" {% if form_data.hora == '23' %}selected{% endif %}>23</option>
-                                </select>
+                                <input type="number" name="hora" id="inputHora" class="form-control" min="0" max="23" placeholder="HH">
                                 <span class="input-group-text">:</span>
-                                <select name="minuto" class="form-select" required>
-                                    <option value="0" {% if form_data.minuto == '0' %}selected{% endif %}>00</option>
-                                    <option value="15" {% if form_data.minuto == '15' %}selected{% endif %}>15</option>
-                                    <option value="30" {% if form_data.minuto == '30' %}selected{% endif %}>30</option>
-                                    <option value="45" {% if form_data.minuto == '45' %}selected{% endif %}>45</option>
-                                </select>
+                                <input type="number" name="minuto" id="inputMinuto" class="form-control" min="0" max="59" step="5" placeholder="MM">
                             </div>
                         </div>
 
                         <div class="col-12 text-center mt-4">
-                            <button type="submit" class="btn btn-primary btn-lg px-5 rounded-pill shadow">
-                                🔮 Consultar Oráculo
+                            <button type="submit" class="btn btn-primary btn-lg w-100 rounded-pill shadow fw-bold transition-all">
+                                ✨ Calcular Ruta
                             </button>
                         </div>
                     </form>
@@ -99,35 +72,61 @@
             </div>
 
             {% if resultado %}
+                
+            <div class="card border-0 bg-white shadow-sm mb-4 fade-in">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center text-secondary">
+                        <div class="text-center">
+                            <small class="d-block fw-bold text-uppercase" style="font-size: 0.7rem;">Salida</small>
+                            <span class="fs-4 text-dark fw-bold">{{ resultado.viaje.hora_salida }}</span>
+                        </div>
+                        
+                        <div class="text-center flex-grow-1 px-3">
+                            <div class="d-flex align-items-center justify-content-center mb-1">
+                                <i class="bi bi-bicycle fs-4 text-primary me-2"></i>
+                                <span class="fw-bold text-primary">{{ resultado.viaje.minutos }} min</span>
+                            </div>
+                            <div class="progress" style="height: 4px;">
+                                <div class="progress-bar bg-primary" style="width: 100%"></div>
+                            </div>
+                            <small class="text-muted">~{{ resultado.viaje.distancia_km }} km estimados</small>
+                        </div>
+
+                        <div class="text-center">
+                            <small class="d-block fw-bold text-uppercase" style="font-size: 0.7rem;">Llegada</small>
+                            <span class="fs-4 text-dark fw-bold">{{ resultado.viaje.hora_llegada }}</span>
+                            {% if resultado.viaje.cambio_dia %}
+                                <sup class="text-danger fw-bold" title="Día siguiente">+1</sup>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="row g-4 fade-in">
                 
                 <div class="col-md-6">
                     <div class="card h-100 border-{{ resultado.origen.color }} shadow-sm">
                         <div class="card-header bg-{{ resultado.origen.color }} text-white text-center fw-bold">
-                            🚲 ORIGEN: Encontrar Bici
+                            🚲 ORIGEN
                         </div>
                         <div class="card-body text-center">
                             <h5 class="card-title text-truncate mb-4">{{ resultado.origen.nombre }}</h5>
-                            
                             <div class="d-inline-flex align-items-center justify-content-center rounded-circle border border-4 border-{{ resultado.origen.color }} mb-3" style="width: 100px; height: 100px;">
                                 <span class="h2 m-0 fw-bold text-{{ resultado.origen.color }}">
                                     {{ resultado.origen.pct }}%
                                 </span>
                             </div>
-                            
-                            <p class="text-muted small mb-0">Probabilidad de éxito</p>
-                            
-                            <hr>
-                            
-                            <div class="d-flex justify-content-between px-2">
+                            <p class="text-muted small mb-3">Probabilidad de encontrar Bici</p>
+                            <div class="d-flex justify-content-between px-2 pt-3 border-top">
                                 <div class="text-start">
-                                    <small class="text-muted d-block">Media Histórica</small>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">MEDIA HISTÓRICA</small>
                                     <span class="fw-bold fs-5">{{ resultado.origen.media }}</span> 
                                     <small>bicis</small>
                                 </div>
                                 <div class="text-end">
-                                    <small class="text-muted d-block">Tendencia</small>
-                                    <span class="fw-bold">{{ resultado.origen.tendencia }}</span>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">TENDENCIA</small>
+                                    <span class="fw-bold text-primary">{{ resultado.origen.tendencia }}</span>
                                 </div>
                             </div>
                         </div>
@@ -137,45 +136,74 @@
                 <div class="col-md-6">
                     <div class="card h-100 border-{{ resultado.destino.color }} shadow-sm">
                         <div class="card-header bg-{{ resultado.destino.color }} text-white text-center fw-bold">
-                            🅿️ DESTINO: Encontrar Hueco
+                            🅿️ DESTINO
                         </div>
                         <div class="card-body text-center">
                             <h5 class="card-title text-truncate mb-4">{{ resultado.destino.nombre }}</h5>
-                            
                             <div class="d-inline-flex align-items-center justify-content-center rounded-circle border border-4 border-{{ resultado.destino.color }} mb-3" style="width: 100px; height: 100px;">
                                 <span class="h2 m-0 fw-bold text-{{ resultado.destino.color }}">
                                     {{ resultado.destino.pct }}%
                                 </span>
                             </div>
-
-                            <p class="text-muted small mb-0">Probabilidad de éxito</p>
-
-                            <hr>
-                            
-                            <div class="d-flex justify-content-between px-2">
+                            <p class="text-muted small mb-3">Probabilidad de encontrar Hueco</p>
+                            <div class="d-flex justify-content-between px-2 pt-3 border-top">
                                 <div class="text-start">
-                                    <small class="text-muted d-block">Media Histórica</small>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">MEDIA HISTÓRICA</small>
                                     <span class="fw-bold fs-5">{{ resultado.destino.media }}</span> 
-                                    <small>anclajes</small>
+                                    <small>huecos</small>
                                 </div>
                                 <div class="text-end">
-                                    <small class="text-muted d-block">Tendencia</small>
-                                    <span class="fw-bold">{{ resultado.destino.tendencia }}</span> </div>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">TENDENCIA</small>
+                                    <span class="fw-bold text-primary">{{ resultado.destino.tendencia }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-            </div>
-            
-            <div class="alert alert-info mt-4 text-center small">
-                <i class="bi bi-info-circle"></i> 
-                Cálculo basado en registros históricos a las {{ form_data.hora }}:{{ form_data.minuto|default:"00" }} (±4 min).
+            </div> <div class="alert alert-info mt-4 text-center small shadow-sm">
+                <i class="bi bi-info-circle me-1"></i> 
+                Cálculo basado en registros históricos a las <strong>{{ form_data.hora }}:{{ form_data.minuto|default:"00" }}</strong> (±4 min).
             </div>
 
-            {% endif %}
-
-        </div>
+            {% endif %} </div>
     </div>
 </div>
+
+{% include 'core/includes/selector_modal.html' %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- LÓGICA DE "AHORA POR DEFECTO" ---
+        
+        const vieneDelServer = "{{ form_data.hora|default:'no' }}" !== 'no';
+
+        if (!vieneDelServer) {
+            const now = new Date();
+            let jsDay = now.getDay();
+            let djangoDay = jsDay + 1; 
+            document.getElementById('selectDia').value = djangoDay;
+
+            let h = now.getHours();
+            let m = now.getMinutes();
+            m = Math.ceil(m / 5) * 5;
+            
+            if (m === 60) {
+                m = 0;
+                h = h + 1;
+                if (h === 24) h = 0; 
+            }
+
+            document.getElementById('inputHora').value = h;
+            document.getElementById('inputMinuto').value = m;
+        } else {
+            document.getElementById('selectDia').value = "{{ form_data.dia }}";
+            document.getElementById('inputHora').value = "{{ form_data.hora }}";
+            document.getElementById('inputMinuto').value = "{{ form_data.minuto }}";
+        }
+    });
+</script>
 {% endblock %}

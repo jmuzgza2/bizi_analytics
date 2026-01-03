@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from .models import Estacion, LecturaEstacion, Captura 
-import json
+import json, math
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Sum, Avg
 from django.utils import timezone
@@ -45,21 +45,29 @@ def lista_estaciones(request):
 def detalle_estacion(request, estacion_id):
     estacion = get_object_or_404(Estacion, id_externo=estacion_id)
     
-    # --- CAMBIO CRÍTICO: FILTRAR POR TIEMPO, NO POR CANTIDAD ---
-    # Calculamos el momento exacto hace 24 horas
-    hace_24h = timezone.now() - timedelta(hours=24)
+    # 1. GESTIÓN DEL RANGO TEMPORAL
+    # Leemos el parámetro GET. Por defecto '24h'.
+    rango = request.GET.get('rango', '24h')
+    
+    if rango == '7d':
+        horas_atras = 24 * 7 # 168 horas
+        titulo_rango = "Últimos 7 días"
+    else:
+        horas_atras = 24
+        titulo_rango = "Últimas 24 horas"
+        rango = '24h' # Forzamos valor limpio por seguridad
 
-    # Obtenemos TODAS las lecturas de las últimas 24h
-    # No importa si se capturaron cada 3 min o cada 15 min, las traerá todas.
+    start_date = timezone.now() - timedelta(hours=horas_atras)
+
+    # 2. CONSULTA FILTRADA POR ESE RANGO
     lecturas_query = LecturaEstacion.objects.filter(
         estacion=estacion,
-        captura__timestamp__gte=hace_24h
+        captura__timestamp__gte=start_date
     ).select_related('captura').order_by('captura__timestamp')
     
-    # Ya no hacemos slicing [-200:], usamos todo el query
     lecturas = list(lecturas_query)
     
-    # --- 1. PREPARACIÓN DE DATOS ---
+    # --- PROCESAMIENTO DE DATOS ---
     dataset_bicis = []
     dataset_anclajes = []
     
@@ -71,20 +79,16 @@ def detalle_estacion(request, estacion_id):
     
     for l in lecturas:
         ts = l.captura.timestamp.isoformat()
-        
         dataset_bicis.append({'x': ts, 'y': l.bicis_disponibles})
         dataset_anclajes.append({'x': ts, 'y': l.anclajes_libres})
         
         suma_bicis += l.bicis_disponibles
         suma_anclajes += l.anclajes_libres
         
-        if l.bicis_disponibles == 0:
-            conteo_sin_bicis += 1
-        
-        if l.anclajes_libres == 0:
-            conteo_sin_anclajes += 1
+        if l.bicis_disponibles == 0: conteo_sin_bicis += 1
+        if l.anclajes_libres == 0: conteo_sin_anclajes += 1
 
-    # --- 2. CÁLCULO DE MÉTRICAS ---
+    # --- ESTADÍSTICAS (Calculadas sobre el rango seleccionado) ---
     stats = {
         'media_bicis': 0,
         'media_anclajes': 0,
@@ -98,27 +102,26 @@ def detalle_estacion(request, estacion_id):
         stats['pct_sin_bicis'] = round((conteo_sin_bicis / total) * 100, 1)
         stats['pct_sin_anclajes'] = round((conteo_sin_anclajes / total) * 100, 1)
 
-    ### MAPA DE CALOR (Esto sigue igual, últimos 30 días)
+    # --- MAPA DE CALOR (Siempre últimos 30 días para contexto histórico) ---
     hace_un_mes = timezone.now() - timedelta(days=30)
-    
     lecturas_mes = LecturaEstacion.objects.filter(
-        estacion=estacion,
+        estacion=estacion, 
         captura__timestamp__gte=hace_un_mes
     ).select_related('captura').only('captura__timestamp', 'bicis_disponibles')
-
-    # Estructura de celda: {'suma': 0, 'conteo': 0}
-    heatmap_raw = [[{'s': 0, 'c': 0} for _ in range(24)] for _ in range(7)]
+    
+    # Inicializamos matriz: 7 días x 24 horas x 4 cuartos
+    # Cada cuarto es un dict: {'s': suma, 'c': conteo}
+    heatmap_raw = [[[{'s': 0, 'c': 0} for _ in range(4)] for _ in range(24)] for _ in range(7)]
 
     for l in lecturas_mes:
-        # Convertimos a hora local
-        # IMPORTANTE: Asegúrate que TIME_ZONE = 'Europe/Madrid' en settings.py
-        fecha_local = timezone.localtime(l.captura.timestamp)
+        fl = timezone.localtime(l.captura.timestamp)
+        dia = fl.weekday()
+        hora = fl.hour
+        # Calculamos el cuarto de hora (0, 1, 2 o 3)
+        cuarto = fl.minute // 15
         
-        dia = fecha_local.weekday() 
-        hora = fecha_local.hour
-        
-        heatmap_raw[dia][hora]['s'] += l.bicis_disponibles
-        heatmap_raw[dia][hora]['c'] += 1
+        heatmap_raw[dia][hora][cuarto]['s'] += l.bicis_disponibles
+        heatmap_raw[dia][hora][cuarto]['c'] += 1
 
     dias_nombres = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
     heatmap_data = []
@@ -126,26 +129,32 @@ def detalle_estacion(request, estacion_id):
     for i in range(7):
         fila_horas = []
         for h in range(24):
-            datos = heatmap_raw[i][h]
-            if datos['c'] > 0:
-                promedio = round(datos['s'] / datos['c'], 1)
-            else:
-                promedio = None 
-            fila_horas.append(promedio)
+            bloque_cuartos = []
+            for q in range(4):
+                datos = heatmap_raw[i][h][q]
+                if datos['c'] > 0:
+                    promedio = round(datos['s'] / datos['c'], 1)
+                else:
+                    promedio = None
+                bloque_cuartos.append(promedio)
+            
+            # Ahora cada celda 'h' contiene una lista de 4 promedios
+            fila_horas.append(bloque_cuartos)
             
         heatmap_data.append({
-            'nombre': dias_nombres[i],
+            'nombre': dias_nombres[i], 
             'horas': fila_horas
         })
 
     context = {
         'estacion': estacion,
-        'lecturas': reversed(lecturas[-10:]), # Tabla inferior: solo las 10 últimas lecturas
+        'lecturas': list(reversed(lecturas[-10:])), # Lista invertida de los últimos 10
         'dataset_bicis': dataset_bicis,
         'dataset_anclajes': dataset_anclajes,
         'stats': stats, 
         'heatmap_data': heatmap_data,
-        # Pasamos los filtros de vuelta si los tuvieras implementados
+        'rango_actual': rango,
+        'titulo_rango': titulo_rango
     }
     return render(request, 'core/detalle_estacion.html', context)
 
@@ -277,6 +286,23 @@ def calcular_prediccion_precisa(estacion_id, dia_semana, hora, minuto):
         'tendencia': tendencia
     }
 
+import math
+# ... otros imports ...
+
+# --- FUNCIÓN AUXILIAR: CALCULAR DISTANCIA (Haversine) ---
+def haversine(lat1, lon1, lat2, lon2):
+    """Devuelve distancia en metros entre dos coordenadas."""
+    R = 6371000  # Radio Tierra en metros
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+
+    a = math.sin(dphi/2)**2 + \
+        math.cos(phi1) * math.cos(phi2) * \
+        math.sin(dlambda/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
+
 def planificador(request):
     estaciones = Estacion.objects.all().order_by('nombre')
     resultado = None
@@ -285,43 +311,87 @@ def planificador(request):
         try:
             origen_id = request.GET.get('origen')
             destino_id = request.GET.get('destino')
-            dia = int(request.GET.get('dia')) # 0=Lunes ... 6=Domingo (Ojo: Django usa: 1=Domingo, 2=Lunes...)
-            # CORRECCIÓN: Django week_day: 1 (Sunday) to 7 (Saturday).
-            # Ajustaremos el formulario para enviar el valor correcto de Django.
             
-            hora = int(request.GET.get('hora'))
-            minuto = int(request.GET.get('minuto', 0))
+            # Recuperamos objetos Estacion completos (necesitamos lat/lon)
+            obj_origen = Estacion.objects.get(id_externo=origen_id)
+            obj_destino = Estacion.objects.get(id_externo=destino_id)
+
+            # --- INPUTS DE TIEMPO ---
+            dia_input = int(request.GET.get('dia')) # Django format: 1=Dom...7=Sab
+            hora_input = int(request.GET.get('hora'))
+            min_input = int(request.GET.get('minuto', 0))
+
+            # --- 1. CÁLCULO DE VIAJE ---
+            # Distancia aérea
+            dist_metros = haversine(
+                float(obj_origen.latitud), float(obj_origen.longitud),
+                float(obj_destino.latitud), float(obj_destino.longitud)
+            )
             
-            # Llamamos a la lógica
-            datos_origen = calcular_prediccion_precisa(origen_id, dia, hora, minuto)
-            datos_destino = calcular_prediccion_precisa(destino_id, dia, hora, minuto)
+            # Estimación Realista:
+            # Factor 1.4 por callejeo (Manhattan/Tortuosidad)
+            # Velocidad media Bizi: 12km/h = 200 metros/minuto
+            dist_real = dist_metros * 1.4
+            minutos_viaje = int(dist_real / 200)
             
-            # Recuperar nombres para pintar bonito
-            nom_origen = Estacion.objects.get(id_externo=origen_id).nombre
-            nom_destino = Estacion.objects.get(id_externo=destino_id).nombre
+            # Mínimo 5 min (nadie teletransporta) si es muy cerca
+            if minutos_viaje < 5: minutos_viaje = 5
+
+            # --- 2. CÁLCULO HORA LLEGADA ---
+            # Usamos datetime para sumar minutos fácilmente y manejar cambios de día
+            # Creamos una fecha dummy. Nota: Django week_day 1=Dom es raro para Python.
+            # Simplemente sumamos minutos y extraemos la nueva hora.
             
-            # Manejo de "Sin datos"
+            # Referencia base arbitraria
+            fecha_salida = datetime.datetime(2024, 1, 1, hora_input, min_input)
+            fecha_llegada = fecha_salida + timedelta(minutes=minutos_viaje)
+            
+            hora_llegada = fecha_llegada.hour
+            min_llegada = fecha_llegada.minute
+            
+            # Detectar cambio de día (si la fecha cambió)
+            dia_llegada = dia_input
+            if fecha_llegada.day != fecha_salida.day:
+                dia_llegada += 1
+                if dia_llegada > 7: dia_llegada = 1 # Vuelta a Domingo
+
+            # --- 3. ORÁCULO INTELIGENTE ---
+            
+            # A. Origen: A la hora de SALIDA
+            datos_origen = calcular_prediccion_precisa(origen_id, dia_input, hora_input, min_input)
+            
+            # B. Destino: A la hora de LLEGADA
+            datos_destino = calcular_prediccion_precisa(destino_id, dia_llegada, hora_llegada, min_llegada)
+            
+            # Manejo de vacíos
             if not datos_origen: datos_origen = {'prob_bici': 0, 'media_bicis': 0, 'tendencia': 'Sin datos'}
             if not datos_destino: datos_destino = {'prob_hueco': 0, 'media_anclajes': 0, 'tendencia': 'Sin datos'}
 
             resultado = {
+                'viaje': {
+                    'minutos': minutos_viaje,
+                    'distancia_km': round(dist_real / 1000, 1),
+                    'hora_salida': f"{hora_input:02d}:{min_input:02d}",
+                    'hora_llegada': f"{hora_llegada:02d}:{min_llegada:02d}",
+                    'cambio_dia': (dia_llegada != dia_input)
+                },
                 'origen': {
-                    'nombre': nom_origen,
+                    'nombre': obj_origen.nombre,
                     'pct': datos_origen['prob_bici'],
                     'media': datos_origen['media_bicis'],
                     'tendencia': datos_origen.get('tendencia', '-'),
                     'color': 'success' if datos_origen['prob_bici'] > 60 else 'warning' if datos_origen['prob_bici'] > 20 else 'danger'
                 },
                 'destino': {
-                    'nombre': nom_destino,
+                    'nombre': obj_destino.nombre,
                     'pct': datos_destino['prob_hueco'],
                     'media': datos_destino['media_anclajes'],
+                    'tendencia': datos_destino.get('tendencia', '-'),
                     'color': 'success' if datos_destino['prob_hueco'] > 60 else 'warning' if datos_destino['prob_hueco'] > 20 else 'danger'
                 }
             }
         except Exception as e:
-            # Si hay algún error de conversión o datos, simplemente no mostramos resultado
-            print(f"Error en planificador: {e}")
+            print(f"Error planificador: {e}")
             pass
 
     context = {

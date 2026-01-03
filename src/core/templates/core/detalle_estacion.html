@@ -1,319 +1,373 @@
-<!DOCTYPE html>
-{% load l10n %}
-<html>
-<head>
-    <title>{{ estacion.nombre }} - Estadísticas</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-</head>
+{% extends 'core/base.html' %}
 
-<body class="container mt-4 mb-5">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+{% block title %}Detalle Estación - {{ estacion.nombre }}{% endblock %}
+
+{% block content %}
+<div class="container pb-5">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <div class="d-flex align-items-center gap-3">
-                <h1 class="mb-0">{{ estacion.nombre }}</h1>
+            <a href="{% url 'lista_estaciones' %}" class="text-decoration-none text-muted small">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+            
+            <div class="d-flex align-items-center gap-3 mt-1">
+                <h2 class="fw-bold mb-0">{{ estacion.nombre }}</h2>
                 
-                <button id="btnFavDetalle" class="btn btn-outline-secondary" 
-                        style="border-radius: 50%; width: 42px; height: 42px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                <button id="btnFavDetalle" class="btn btn-outline-secondary btn-sm rounded-circle d-flex align-items-center justify-content-center shadow-sm" 
+                        style="width: 32px; height: 32px;"
+                        data-id="{{ estacion.id_externo }}">
                     🤍
                 </button>
             </div>
-            
-            <small class="text-muted">ID: {{ estacion.id_externo }} | Capacidad Total: {{ estacion.capacidad_total }}</small>
+
+            <span class="badge bg-secondary">Estación nº {{ estacion.id_externo }}</span>
         </div>
-        <a href="{% url 'lista_estaciones' %}" class="btn btn-outline-secondary">Volver</a>
+        
+        {% with ultima=lecturas|first %}
+        <div class="text-end">
+            <div class="d-flex gap-2 justify-content-end mb-1">
+                <span class="badge bg-primary fs-5">🚲 {{ ultima.bicis_disponibles|default:"--" }}</span>
+                <span class="badge bg-secondary fs-5">🅿️ {{ ultima.anclajes_libres|default:"--" }}</span>
+            </div>
+            <small class="text-muted" style="font-size: 0.75rem;">
+                Actualizado: {{ ultima.captura.timestamp|date:"H:i" }}
+            </small>
+        </div>
+        {% endwith %}
     </div>
 
-    <div class="row text-center mb-4">
-        <div class="col-md-3">
-            <div class="card border-success mb-3 h-100">
-                <div class="card-header bg-success text-white">Media Bicis</div>
-                <div class="card-body">
-                    <h2 class="card-title">{{ stats.media_bicis }}</h2>
-                    <p class="card-text small text-muted">Promedio disponible</p>
+    <div class="card bg-light border-0 shadow-sm mb-4">
+        <div class="card-body py-2">
+            <div class="row align-items-center">
+                
+                <div class="col-md-6 mb-2 mb-md-0">
+                    <div class="btn-group w-100 w-md-auto" role="group">
+                        <a href="?rango=24h" class="btn btn-sm {% if rango_actual == '24h' %}btn-primary fw-bold{% else %}btn-outline-primary bg-white{% endif %}">
+                            Últimas 24h
+                        </a>
+                        <a href="?rango=7d" class="btn btn-sm {% if rango_actual == '7d' %}btn-primary fw-bold{% else %}btn-outline-primary bg-white{% endif %}">
+                            Últimos 7 Días
+                        </a>
+                    </div>
+                </div>
+
+                <div class="col-md-6 text-md-end">
+                    <div class="d-flex justify-content-end gap-3 align-items-center">
+                        <span class="small text-muted fw-bold text-uppercase me-1 d-none d-sm-inline">Mostrar:</span>
+                        
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" id="checkBicis" checked style="cursor: pointer;">
+                            <label class="form-check-label small fw-bold text-primary" for="checkBicis" style="cursor: pointer;">🚲 Bicis</label>
+                        </div>
+                        
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" id="checkAnclajes" checked style="cursor: pointer;">
+                            <label class="form-check-label small fw-bold text-secondary" for="checkAnclajes" style="cursor: pointer;">🅿️ Anclajes</label>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-danger mb-3 h-100">
-                <div class="card-header bg-danger text-white">Sin Bicis (Vacía)</div>
-                <div class="card-body">
-                    <h2 class="card-title">{{ stats.pct_sin_bicis }}%</h2>
-                    <p class="card-text small text-muted">del tiempo sin stock</p>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-primary h-100 shadow-sm">
+                <div class="card-body text-center p-2">
+                    <h3 class="fw-bold text-primary mb-0">{{ stats.media_bicis }}</h3>
+                    <small class="text-muted lh-1">Media Bicis<br>({{ titulo_rango }})</small>
                 </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card h-100 shadow-sm {% if stats.pct_sin_bicis > 10 %}border-danger bg-danger bg-opacity-10{% else %}border-success{% endif %}">
+                <div class="card-body text-center p-2">
+                    <h3 class="fw-bold {% if stats.pct_sin_bicis > 10 %}text-danger{% else %}text-success{% endif %} mb-0">{{ stats.pct_sin_bicis }}%</h3>
+                    <small class="text-muted lh-1">Tiempo Vacía<br>(Riesgo)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-secondary h-100 shadow-sm">
+                <div class="card-body text-center p-2">
+                    <h3 class="fw-bold text-secondary mb-0">{{ stats.media_anclajes }}</h3>
+                    <small class="text-muted lh-1">Media Anclajes<br>({{ titulo_rango }})</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card h-100 shadow-sm {% if stats.pct_sin_anclajes > 10 %}border-danger bg-danger bg-opacity-10{% else %}border-success{% endif %}">
+                <div class="card-body text-center p-2">
+                    <h3 class="fw-bold {% if stats.pct_sin_anclajes > 10 %}text-danger{% else %}text-success{% endif %} mb-0">{{ stats.pct_sin_anclajes }}%</h3>
+                    <small class="text-muted lh-1">Tiempo Llena<br>(Riesgo)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card p-3 mb-4 shadow-sm">
+        <canvas id="graficoEstacion" style="max-height: 300px;"></canvas>
+    </div>
+
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+            <span>🔥 Patrón Semanal (Detalle 15 min)</span>
+            <div class="d-flex gap-2 small">
+                <span class="badge" style="background-color: #dc3545;">Vacía</span>
+                <span class="badge" style="background-color: #ffc107; color: black;">Pocas</span>
+                <span class="badge" style="background-color: #198754;">Disponibles</span>
             </div>
         </div>
         
-        <div class="col-md-3">
-            <div class="card border-primary mb-3 h-100">
-                <div class="card-header bg-primary text-white">Media Anclajes</div>
-                <div class="card-body">
-                    <h2 class="card-title">{{ stats.media_anclajes }}</h2>
-                    <p class="card-text small text-muted">Huecos libres promedio</p>
-                </div>
+        <div class="card-body p-0 overflow-auto">
+            <div class="table-responsive">
+                <table class="table table-bordered m-0" style="min-width: 800px;">
+                    <thead class="bg-light text-center small text-muted">
+                        <tr>
+                            <th style="width: 50px;"></th>
+                            {% for h in "012345678901234567890123"|make_list %}
+                                <th class="p-1 fw-normal">{{ forloop.counter0 }}h</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dia in heatmap_data %}
+                        <tr>
+                            <td class="fw-bold bg-light small align-middle text-center p-1">
+                                {{ dia.nombre }}
+                            </td>
+
+                            {% for cuartos in dia.horas %}
+                            <td class="p-0 align-middle" style="height: 35px; min-width: 40px;">
+                                <div class="d-flex w-100 h-100">
+                                    
+                                    {% for valor in cuartos %}
+                                        {% if valor is None %}
+                                            <div class="flex-fill border-end" style="background-color: #f8f9fa;"></div>
+                                        {% else %}
+                                            {% if valor < 1 %}
+                                                <div class="flex-fill border-end position-relative group-hover" 
+                                                     style="background-color: #dc3545; cursor: help;"
+                                                     data-bs-toggle="tooltip" title="{{ forloop.parentloop.counter0 }}:{% if forloop.counter0 == 0 %}00{% elif forloop.counter0 == 1 %}15{% elif forloop.counter0 == 2 %}30{% else %}45{% endif %} -> {{ valor }} bicis">
+                                                </div>
+                                            {% elif valor < 3 %}
+                                                <div class="flex-fill border-end position-relative" 
+                                                     style="background-color: #ffc107; cursor: help;"
+                                                     data-bs-toggle="tooltip" title="{{ valor }} bicis (Pocas)">
+                                                </div>
+                                            {% elif valor < 6 %}
+                                                <div class="flex-fill border-end position-relative" 
+                                                     style="background-color: #75b798; cursor: help;"
+                                                     data-bs-toggle="tooltip" title="{{ valor }} bicis">
+                                                </div>
+                                            {% else %}
+                                                <div class="flex-fill border-end position-relative" 
+                                                     style="background-color: #198754; cursor: help;"
+                                                     data-bs-toggle="tooltip" title="{{ valor }} bicis (Alta Disp.)">
+                                                </div>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                </div>
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-warning mb-3 h-100">
-                <div class="card-header bg-warning text-dark">Sin Anclajes (Llena)</div>
-                <div class="card-body">
-                    <h2 class="card-title">{{ stats.pct_sin_anclajes }}%</h2>
-                    <p class="card-text small text-muted">del tiempo sin sitio</p>
-                </div>
-            </div>
+        <div class="card-footer text-muted small bg-light">
+            * Cada celda horaria se divide en 4 franjas de 15 minutos. Pasa el ratón para ver la media exacta.
         </div>
     </div>
 
-
-    <style>
-    .heatmap-container {
-        overflow-x: auto;
-    }
-    .heatmap-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 2px;
-        font-size: 0.75rem;
-    }
-    .heatmap-cell {
-        height: 25px;
-        min-width: 25px;
-        text-align: center;
-        vertical-align: middle;
-        border-radius: 3px;
-        color: rgba(0,0,0,0.6);
-        cursor: pointer;
-        transition: transform 0.1s;
-    }
-    .heatmap-cell:hover {
-        transform: scale(1.2);
-        border: 1px solid #333;
-        z-index: 10;
-        font-weight: bold;
-        color: black;
-    }
-    .dia-label {
-        font-weight: bold;
-        text-align: right;
-        padding-right: 8px;
-        width: 40px;
-    }
-    .hora-label {
-        text-align: center;
-        color: #666;
-        font-size: 0.7rem;
-    }
-</style>
-
-<div class="card mb-4 shadow-sm">
-    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">🔥 Patrones de Disponibilidad (Últimos 30 días)</h5>
-        <small class="text-white-50">Rojo = Vacío | Verde = Lleno</small>
-    </div>
-    <div class="card-body heatmap-container">
-        
-        <table class="heatmap-table">
-            <tr>
-                <td></td>
-                {% for i in "x"|rjust:"24" %}
-                <td class="hora-label">{{ forloop.counter0 }}h</td>
+    <h5 class="fw-bold mt-4">📋 Últimas Actualizaciones</h5>
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-striped table-hover mb-0 bg-white">
+            <thead class="table-primary">
+                <tr>
+                    <th>Hora</th>
+                    <th>Bicis</th>
+                    <th>Anclajes</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lectura in lecturas %}
+                <tr>
+                    <td>{{ lectura.captura.timestamp|date:"d/m H:i" }}</td>
+                    <td class="fw-bold text-primary">{{ lectura.bicis_disponibles }}</td>
+                    <td class="text-secondary">{{ lectura.anclajes_libres }}</td>
+                    <td>
+                        {% if lectura.bicis_disponibles == 0 %}
+                            <span class="badge bg-danger">Vacía</span>
+                        {% elif lectura.anclajes_libres == 0 %}
+                            <span class="badge bg-danger">Llena</span>
+                        {% else %}
+                            <span class="badge bg-success">Operativa</span>
+                        {% endif %}
+                    </td>
+                </tr>
                 {% endfor %}
-            </tr>
-
-            {% for dia in heatmap_data %}
-            <tr>
-                <td class="dia-label">{{ dia.nombre }}</td>
-                
-                {% load l10n %} 
-
-                {% for valor in dia.horas %}
-                    {% if valor is None %}
-                        <td class="heatmap-cell" style="background-color: #f8f9fa;" title="Sin datos de lectura">
-                            <span style="opacity: 0.2;">·</span>
-                        </td>
-                    {% else %}
-                        <td class="heatmap-cell" 
-                            title="{{ dia.nombre }} {{ forloop.counter0 }}:00 - Promedio: {{ valor }} bicis"
-                            style="
-                                /* IMPORTANTE: Usamos |unlocalize para que ponga 5.0 en vez de 5,0 */
-                                --capacidad: {{ estacion.capacidad_total|default:20|unlocalize }};
-                                --valor: {{ valor|unlocalize }};
-                                
-                                /* Fórmula de color HSL */
-                                background-color: hsl(calc( (var(--valor) / var(--capacidad)) * 120 ), 80%, 75%);
-                            ">
-                            <span style="font-size: 0.6rem; opacity: 0.5;">{{ valor|floatformat:0 }}</span>
-                        </td>
-                    {% endif %}
-                {% endfor %}    
-            </tr>
-            {% endfor %}
+            </tbody>
         </table>
-        <div class="text-center mt-2 small text-muted">
-            Los colores representan el promedio de bicicletas disponibles a esa hora y día de la semana.
-        </div>
     </div>
+
 </div>
+{% endblock %}
 
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
-
-
-
-
-    <div class="card mb-4 shadow-sm">
-        <div class="card-header bg-light fw-bold">Disponibilidad: Bicis vs Anclajes</div>
-        <div class="card-body">
-            <canvas id="miGrafico" height="80"></canvas>
-        </div>
-    </div>
-
-    <h3>Historial Reciente</h3>
-    <table class="table table-sm table-hover mt-3">
-        <thead class="table-light">
-            <tr>
-                <th>Hora</th>
-                <th>Bicis</th>
-                <th>Anclajes</th>
-                <th>Estado</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for lectura in lecturas %}
-            <tr>
-                <td>{{ lectura.captura.timestamp|date:"d/m H:i" }}</td>
-                
-                <td class="{% if lectura.bicis_disponibles == 0 %}table-danger fw-bold{% else %}text-success{% endif %}">
-                    {{ lectura.bicis_disponibles }}
-                </td>
-                
-                <td class="{% if lectura.anclajes_libres == 0 %}table-warning fw-bold{% else %}text-primary{% endif %}">
-                    {{ lectura.anclajes_libres }}
-                </td>
-
-                <td>
-                    {% if lectura.estado == 'OPN' %}
-                        <span class="badge bg-success">Abierta</span>
-                    {% else %}
-                        <span class="badge bg-danger">{{ lectura.estado }}</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <script>
-        const ctx = document.getElementById('miGrafico').getContext('2d');
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
         
+        // --- 1. LÓGICA DE FAVORITOS ---
+        const btnFav = document.getElementById('btnFavDetalle');
+        const stationId = btnFav.getAttribute('data-id');
+        const STORAGE_KEY = 'bizi_favoritos_lista';
+
+        function getFavoritos() {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+        }
+
+        function updateFavIcon() {
+            const favs = getFavoritos();
+            if (favs.includes(stationId)) {
+                btnFav.innerHTML = '❤️';
+                btnFav.classList.remove('btn-outline-secondary');
+                btnFav.classList.add('btn-outline-danger');
+                btnFav.style.borderWidth = "2px";
+            } else {
+                btnFav.innerHTML = '🤍';
+                btnFav.classList.add('btn-outline-secondary');
+                btnFav.classList.remove('btn-outline-danger');
+                btnFav.style.borderWidth = "1px";
+            }
+        }
+
+        btnFav.addEventListener('click', function() {
+            let favs = getFavoritos();
+            if (favs.includes(stationId)) {
+                favs = favs.filter(id => id !== stationId); // Quitar
+            } else {
+                favs.push(stationId); // Añadir
+            }
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
+            updateFavIcon();
+        });
+
+        // Inicializar estado al cargar
+        updateFavIcon();
+
+
+        // --- 2. CONFIGURACIÓN DEL GRÁFICO ---
+        const ctx = document.getElementById('graficoEstacion').getContext('2d');
+        
+        // Datos desde Django
         const dataBicis = {{ dataset_bicis|safe }};
         const dataAnclajes = {{ dataset_anclajes|safe }};
+        const rangoActual = "{{ rango_actual }}"; // '24h' o '7d'
 
-        new Chart(ctx, {
+        // Configuración visual según rango
+        const pointRadius = (rangoActual === '7d') ? 0 : 3;
+
+        // Creamos el gráfico
+        const chart = new Chart(ctx, {
             type: 'line',
             data: {
                 datasets: [
                     {
                         label: 'Bicis Disponibles',
                         data: dataBicis,
-                        borderColor: '#198754', // Verde
-                        backgroundColor: 'rgba(25, 135, 84, 0.1)',
-                        tension: 0.1,
-                        fill: false, // Solo línea para ver mejor el cruce
+                        borderColor: '#0d6efd', // Azul Primary
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: pointRadius, 
+                        pointHitRadius: 10,
                         borderWidth: 2
                     },
                     {
                         label: 'Anclajes Libres',
                         data: dataAnclajes,
-                        borderColor: '#0d6efd', // Azul Bootstrap
-                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                        tension: 0.1,
-                        fill: false,
-                        borderWidth: 2
+                        borderColor: '#6c757d', // Gris Secondary
+                        backgroundColor: 'rgba(108, 117, 125, 0.05)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: pointRadius,
+                        pointHitRadius: 10,
+                        borderWidth: 2,
+                        hidden: false // Visible por defecto
                     }
                 ]
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false, // Permitir altura personalizada
                 interaction: {
                     mode: 'index',
                     intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        display: false // Ocultamos la leyenda nativa porque usamos nuestros botones
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: function(context) {
+                                // Formato de fecha en tooltip
+                                const date = new Date(context[0].parsed.x);
+                                return date.toLocaleString('es-ES', { 
+                                    weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                                });
+                            }
+                        }
+                    }
                 },
                 scales: {
                     x: {
                         type: 'time',
                         time: {
-                            unit: 'minute',
-                            displayFormats: { minute: 'HH:mm' }
+                            displayFormats: {
+                                hour: 'HH:mm',
+                                day: 'ccc dd' // Ej: Lun 12
+                            },
+                            tooltipFormat: 'dd/MM HH:mm'
                         },
-                        title: { display: true, text: 'Hora' }
+                        grid: { display: false }
                     },
                     y: {
                         beginAtZero: true,
-                        // Usamos la capacidad total si existe, si no 20 como fallback
-                        suggestedMax: {{ estacion.capacidad_total|default:20 }},
-                        title: { display: true, text: 'Unidades' }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        position: 'top',
+                        title: { display: false }
                     }
                 }
             }
         });
 
+        // --- LÓGICA DE LOS INTERRUPTORES ---
+        
+        const checkBicis = document.getElementById('checkBicis');
+        const checkAnclajes = document.getElementById('checkAnclajes');
 
-        document.addEventListener('DOMContentLoaded', function() {
-            // USAMOS LA MISMA CLAVE QUE EN EL LISTADO PARA QUE SE SINCRONICEN
-            const STORAGE_KEY = 'bizi_favoritos_lista'; 
-            const btnFav = document.getElementById('btnFavDetalle');
-            
-            // Django nos da el ID de la estación actual
-            const currentId = "{{ estacion.id_externo }}"; 
+        // Función para cambiar visibilidad
+        function toggleDataset(index, isVisible) {
+            chart.getDatasetMeta(index).hidden = !isVisible;
+            chart.update();
+        }
 
-            // 1. LEER
-            function getFavoritos() {
-                return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-            }
-
-            // 2. ACTUALIZAR VISUALMENTE
-            function updateBtn() {
-                const favs = getFavoritos();
-                const esFav = favs.includes(currentId);
-
-                if (esFav) {
-                    btnFav.classList.remove('btn-outline-secondary');
-                    btnFav.classList.add('btn-outline-danger'); // Borde rojo
-                    btnFav.innerHTML = '❤️';
-                } else {
-                    btnFav.classList.remove('btn-outline-danger');
-                    btnFav.classList.add('btn-outline-secondary'); // Borde gris
-                    btnFav.innerHTML = '🤍';
-                }
-            }
-
-            // 3. EVENTO CLICK
-            btnFav.addEventListener('click', function() {
-                let favs = getFavoritos();
-                
-                if (favs.includes(currentId)) {
-                    // Si ya está, lo quitamos
-                    favs = favs.filter(id => id !== currentId);
-                } else {
-                    // Si no está, lo ponemos
-                    favs.push(currentId);
-                }
-
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
-                updateBtn(); // Repintar botón
-            });
-
-            // Carga inicial
-            updateBtn();
+        checkBicis.addEventListener('change', function() {
+            toggleDataset(0, this.checked); // Dataset 0 es Bicis
         });
 
+        checkAnclajes.addEventListener('change', function() {
+            toggleDataset(1, this.checked); // Dataset 1 es Anclajes
+        });
 
-    </script>
-</body>
-</html>
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,137 @@
+<div class="modal fade" id="stationSelectorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-fullscreen-sm-down"> 
+        <div class="modal-content">
+            
+            <div class="modal-header border-0 pb-0 d-block">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="modal-title fw-bold" id="modalTitle">Seleccionar Estación</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <div class="input-group input-group-lg border rounded bg-light">
+                    <span class="input-group-text bg-transparent border-0"><i class="bi bi-search"></i></span>
+                    <input type="text" id="modalSearchInput" class="form-control bg-transparent border-0 shadow-none" placeholder="Buscar calle o número..." autocomplete="off">
+                </div>
+            </div>
+
+            <div class="modal-body p-0 mt-2">
+                <div class="list-group list-group-flush" id="modalStationList">
+                    <div class="text-center p-5 text-muted">
+                        <div class="spinner-border text-primary" role="status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script id="stations-data" type="application/json">
+    [
+    {% for e in estaciones %}
+        { "id": "{{ e.id_externo }}", "nombre": "{{ e.nombre }}", "search": "{{ e.id_externo }} {{ e.nombre|lower }}" }
+        {% if not forloop.last %},{% endif %}
+    {% endfor %}
+    ]
+</script>
+
+<script>
+    let targetInputId = null;     // ¿Quién me llamó? (ej: inputOrigen)
+    let targetHiddenId = null;    // ¿Dónde guardo el ID real? (ej: hiddenOrigen)
+    let allStations = [];         // Array con todas las estaciones
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // 1. Cargar estaciones del JSON
+        allStations = JSON.parse(document.getElementById('stations-data').textContent);
+        
+        // 2. Evento de Búsqueda
+        document.getElementById('modalSearchInput').addEventListener('keyup', function(e) {
+            renderList(this.value.toLowerCase());
+        });
+
+        // 3. Foco automático al abrir
+        const myModal = document.getElementById('stationSelectorModal');
+        myModal.addEventListener('shown.bs.modal', function () {
+            document.getElementById('modalSearchInput').focus();
+        });
+    });
+
+    // --- FUNCIÓN PÚBLICA: ABRIR EL SELECTOR ---
+    function openStationSelector(inputId, hiddenId, title) {
+        targetInputId = inputId;
+        targetHiddenId = hiddenId;
+        
+        document.getElementById('modalTitle').innerText = title || "Seleccionar Estación";
+        document.getElementById('modalSearchInput').value = ""; // Limpiar buscador
+        
+        renderList(""); // Renderizar lista (poniendo favoritos arriba)
+        
+        // Abrir Modal Bootstrap
+        const modalEl = document.getElementById('stationSelectorModal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    // --- RENDERIZADO DE LA LISTA ---
+    function renderList(filterText) {
+        const container = document.getElementById('modalStationList');
+        const favs = JSON.parse(localStorage.getItem('bizi_favoritos_lista') || '[]');
+        
+        container.innerHTML = "";
+
+        // Separamos en dos grupos
+        let groupFavs = [];
+        let groupNormal = [];
+
+        allStations.forEach(st => {
+            // Filtro de búsqueda
+            if (filterText && !st.search.includes(filterText)) return;
+
+            const isFav = favs.includes(st.id);
+            const itemHtml = `
+                <button type="button" class="list-group-item list-group-item-action py-3 d-flex align-items-center" onclick="selectStation('${st.id}', '${st.nombre.replace(/'/g, "\\'")}')">
+                    <div class="me-3 fs-4 text-secondary">
+                        ${isFav ? '❤️' : '🚲'}
+                    </div>
+                    <div>
+                        <div class="fw-bold text-dark">${st.nombre}</div>
+                        <small class="text-muted">Estación Nº ${st.id}</small>
+                    </div>
+                    ${isFav ? '<span class="badge bg-light text-dark ms-auto">Favorito</span>' : ''}
+                </button>
+            `;
+
+            if (isFav) groupFavs.push(itemHtml);
+            else groupNormal.push(itemHtml);
+        });
+
+        // Si hay búsqueda activa, no separamos por grupos, mostramos relevancia
+        // Si NO hay búsqueda, mostramos primero Favoritos
+        if (!filterText && groupFavs.length > 0) {
+            container.innerHTML += `<div class="bg-light px-3 py-2 small fw-bold text-uppercase text-muted sticky-top">❤️ Tus Favoritos</div>`;
+            container.innerHTML += groupFavs.join('');
+            container.innerHTML += `<div class="bg-light px-3 py-2 small fw-bold text-uppercase text-muted sticky-top">📍 Todas las Estaciones</div>`;
+        } else if (filterText && groupFavs.length > 0) {
+            // Si busca, mezclamos pero los favs siguen saliendo con corazón
+             container.innerHTML += groupFavs.join('');
+        }
+
+        container.innerHTML += groupNormal.join('');
+
+        if (container.innerHTML === "") {
+            container.innerHTML = `<div class="p-4 text-center text-muted">No se encontraron estaciones</div>`;
+        }
+    }
+
+    // --- AL SELECCIONAR ---
+    function selectStation(id, nombre) {
+        // 1. Rellenar el input visible (para el usuario)
+        document.getElementById(targetInputId).value = nombre;
+        // 2. Rellenar el input oculto (para el formulario)
+        document.getElementById(targetHiddenId).value = id;
+        
+        // 3. Cerrar Modal
+        const modalEl = document.getElementById('stationSelectorModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        modal.hide();
+    }
+</script>
