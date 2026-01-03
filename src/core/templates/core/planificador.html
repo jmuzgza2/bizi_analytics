@@ -88,6 +88,7 @@
                             <div class="progress" style="height: 4px;">
                                 <div class="progress-bar bg-primary" style="width: 100%"></div>
                             </div>
+                            <small class="text-muted">~{{ resultado.viaje.distancia_km }} km estimados</small>
                         </div>
                         <div class="text-center">
                             <small class="d-block fw-bold text-uppercase" style="font-size: 0.7rem;">Llegada</small>
@@ -207,7 +208,10 @@
                 Predicción basada en registros históricos a las <strong>{{ form_data.hora }}:{{ form_data.minuto|default:"00" }}</strong> (±4 min).
             </div>
 
-            {% endif %}    </div>
+            {% endif %}
+
+        </div>
+    </div>
 </div>
 
 {% include 'core/includes/selector_modal.html' %}
@@ -217,8 +221,6 @@
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // --- LÓGICA DE "AHORA POR DEFECTO" ---
-        
         const vieneDelServer = "{{ form_data.hora|default:'no' }}" !== 'no';
 
         if (!vieneDelServer) {
@@ -230,12 +232,7 @@
             let h = now.getHours();
             let m = now.getMinutes();
             m = Math.ceil(m / 5) * 5;
-            
-            if (m === 60) {
-                m = 0;
-                h = h + 1;
-                if (h === 24) h = 0; 
-            }
+            if (m === 60) { m = 0; h = h + 1; if (h === 24) h = 0; }
 
             document.getElementById('inputHora').value = h;
             document.getElementById('inputMinuto').value = m;
