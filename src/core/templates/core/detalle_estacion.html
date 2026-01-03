@@ -227,16 +227,16 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         
-        // 1. TOOLTIPS DEL MAPA DE CALOR (Necesarios para ver los datos)
+        // --- 1. LÓGICA DE FAVORITOS ---
+        const btnFav = document.getElementById('btnFavDetalle');
+        const stationId = btnFav.getAttribute('data-id');
+        const STORAGE_KEY = 'bizi_favoritos_lista';
+        
+        // Activar tooltips de Bootstrap (para el mapa de calor)
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
         var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl)
         })
-
-        // 2. LÓGICA DE FAVORITOS
-        const btnFav = document.getElementById('btnFavDetalle');
-        const stationId = btnFav.getAttribute('data-id');
-        const STORAGE_KEY = 'bizi_favoritos_lista';
 
         function updateFavIcon() {
             const favs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -263,11 +263,63 @@
         });
         updateFavIcon();
 
-        // 3. GRÁFICO (VERSIÓN SEGURA SIN LOCALE EXTERNO)
+
+        // --- 2. GRÁFICO CON SEPARADORES DE DÍAS MANUALES ---
         const ctx = document.getElementById('graficoEstacion').getContext('2d');
         const dataBicis = {{ dataset_bicis|safe }};
         const dataAnclajes = {{ dataset_anclajes|safe }};
         const rangoActual = "{{ rango_actual }}"; 
+
+        // PLUGIN PERSONALIZADO: Dibuja líneas verticales a medianoche
+        const separadorDiasPlugin = {
+            id: 'separadorDias',
+            beforeDraw: (chart) => {
+                // Solo dibujar en modo 7 días
+                if (rangoActual !== '7d') return;
+
+                const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+                
+                ctx.save();
+                ctx.beginPath();
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)'; // Color línea separadora
+                ctx.fillStyle = '#666'; // Color texto
+                ctx.font = 'bold 11px Arial';
+                ctx.textAlign = 'center';
+
+                // Buscar medianoches en el rango actual del eje X
+                let current = new Date(x.min);
+                current.setHours(0, 0, 0, 0); // Ir a la medianoche anterior
+                
+                // Si la medianoche anterior está fuera (izquierda), avanzamos un día
+                if (current.getTime() < x.min) {
+                    current.setDate(current.getDate() + 1);
+                }
+
+                // Bucle para dibujar cada día que caiga dentro del gráfico
+                while (current.getTime() <= x.max) {
+                    const xPos = x.getPixelForValue(current.getTime());
+                    
+                    // 1. Dibujar línea vertical
+                    ctx.moveTo(xPos, top);
+                    ctx.lineTo(xPos, bottom);
+                    
+                    // 2. Escribir nombre del día (Ej: "Lun 04")
+                    // Truco: Escribimos un poco más abajo del gráfico
+                    const fechaTexto = current.toLocaleDateString('es-ES', {weekday: 'short', day: 'numeric'});
+                    // Capitalizar primera letra (lun -> Lun)
+                    const textoFinal = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
+                    
+                    ctx.fillText(textoFinal, xPos, bottom + 10);
+
+                    // Avanzar al siguiente día
+                    current.setDate(current.getDate() + 1);
+                }
+                
+                ctx.stroke();
+                ctx.restore();
+            }
+        };
 
         const chart = new Chart(ctx, {
             type: 'line',
@@ -280,12 +332,13 @@
                         backgroundColor: 'rgba(13, 110, 253, 0.1)',
                         fill: true,
                         tension: 0.3,
+                        // Sin puntos en 7 días para limpiar la vista
                         pointRadius: (rangoActual === '7d') ? 0 : 3,
                         pointHitRadius: 10,
                         borderWidth: 2
                     },
                     {
-                        label: 'Anclajes',
+                        label: 'Huecos',
                         data: dataAnclajes,
                         borderColor: '#6c757d',
                         backgroundColor: 'rgba(108, 117, 125, 0.05)',
@@ -301,39 +354,37 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
-                // ADAPTER SIN LOCALE EXTERNO PARA EVITAR ERRORES
                 scales: {
                     x: {
                         type: 'time',
                         time: {
+                            unit: (rangoActual === '7d') ? 'day' : 'hour',
                             displayFormats: {
                                 hour: 'HH:mm',
-                                day: 'dd/MM' // Día/Mes numérico (ej: 04/01) - Seguro y universal
+                                day: 'dd/MM'
                             },
                             tooltipFormat: 'dd/MM HH:mm'
                         },
                         grid: {
-                            color: function(context) {
-                                // Línea oscura a medianoche
-                                if (context.tick && context.tick.value) {
-                                    const d = new Date(context.tick.value);
-                                    if (d.getHours() === 0 && d.getMinutes() === 0) return 'rgba(0,0,0, 0.3)';
-                                }
-                                return 'rgba(0,0,0, 0.05)';
-                            },
-                            lineWidth: function(context) {
-                                if (context.tick && context.tick.value) {
-                                    const d = new Date(context.tick.value);
-                                    if (d.getHours() === 0 && d.getMinutes() === 0) return 2;
-                                }
-                                return 1;
-                            }
+                            display: (rangoActual !== '7d'), // Ocultar grid automático en 7d para usar el nuestro
+                            drawBorder: false
+                        },
+                        ticks: {
+                            // En 7d ocultamos las etiquetas automáticas porque las pintamos nosotros con el plugin
+                            display: (rangoActual !== '7d') 
                         }
                     },
-                    y: { beginAtZero: true, grid: { color: '#f0f0f0' } }
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#f0f0f0' }
+                    }
                 },
-                plugins: { legend: { display: false } }
-            }
+                plugins: {
+                    legend: { display: false }
+                }
+            },
+            // REGISTRAMOS EL PLUGIN AQUÍ
+            plugins: [separadorDiasPlugin]
         });
 
         // Toggles
