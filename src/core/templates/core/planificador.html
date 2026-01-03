@@ -149,11 +149,17 @@
                                 <ul class="list-unstyled mb-0">
                                     {% for alt in resultado.origen.alternativas %}
                                     <li class="mb-1 border-bottom border-warning pb-1 last-border-0">
-                                        <div class="d-flex justify-content-between">
+                                        <div class="d-flex justify-content-between align-items-center">
                                             <strong>{{ alt.nombre }}</strong>
-                                            <span class="fw-bold" style="color: {{ alt.nivel.color }}">{{ alt.nivel.texto }}</span>
+                                            
+                                            <span class="badge bg-white text-dark border">
+                                                {{ alt.dato_real }} bicis
+                                            </span>
                                         </div>
-                                        <span class="text-muted" style="font-size: 0.75rem;">A {{ alt.tiempo_pie }} min ({{ alt.distancia }}m)</span>
+                                        <div class="d-flex justify-content-between mt-1">
+                                            <span class="text-muted" style="font-size: 0.75rem;">A {{ alt.tiempo_pie }} min</span>
+                                            <span class="fw-bold" style="font-size: 0.8rem; color: {{ alt.nivel.color }}">{{ alt.nivel.texto }}</span>
+                                        </div>
                                     </li>
                                     {% endfor %}
                                 </ul>
@@ -211,11 +217,17 @@
                                 <ul class="list-unstyled mb-0">
                                     {% for alt in resultado.destino.alternativas %}
                                     <li class="mb-1 border-bottom border-warning pb-1 last-border-0">
-                                        <div class="d-flex justify-content-between">
+                                        <div class="d-flex justify-content-between align-items-center">
                                             <strong>{{ alt.nombre }}</strong>
-                                            <span class="fw-bold" style="color: {{ alt.nivel.color }}">{{ alt.nivel.texto }}</span>
+                                            
+                                            <span class="badge bg-white text-dark border">
+                                                {{ alt.dato_real }} huecos
+                                            </span>
                                         </div>
-                                        <span class="text-muted" style="font-size: 0.75rem;">A {{ alt.tiempo_pie }} min ({{ alt.distancia }}m)</span>
+                                        <div class="d-flex justify-content-between mt-1">
+                                            <span class="text-muted" style="font-size: 0.75rem;">A {{ alt.tiempo_pie }} min</span>
+                                            <span class="fw-bold" style="font-size: 0.8rem; color: {{ alt.nivel.color }}">{{ alt.nivel.texto }}</span>
+                                        </div>
                                     </li>
                                     {% endfor %}
                                 </ul>

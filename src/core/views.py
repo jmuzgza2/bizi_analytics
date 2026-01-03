@@ -184,26 +184,46 @@ def calcular_prediccion_precisa(estacion_id, dia, hora, minuto):
     }
 
 def buscar_alternativas(target_estacion_id, dia, hora, minuto, tipo_busqueda):
-    """Busca estaciones cercanas (max 500m) que tengan MEJOR probabilidad."""
+    """
+    Busca estaciones cercanas con MEJOR probabilidad.
+    Ahora incluye DATO REAL (Bicis/Anclajes actuales).
+    """
     try:
         origen = Estacion.objects.get(id_externo=target_estacion_id)
         todas = Estacion.objects.exclude(id_externo=target_estacion_id)
         candidatas = []
+        
+        # Obtenemos la última captura para saber el estado real AHORA
+        ult_captura = Captura.objects.order_by('-timestamp').first()
 
         for est in todas:
+            # 1. Filtro distancia (500m)
             dist = haversine(float(origen.latitud), float(origen.longitud), float(est.latitud), float(est.longitud))
             if dist <= 500: 
+                # 2. Predicción histórica
                 pred = calcular_prediccion_precisa(est.id_externo, dia, hora, minuto)
                 if not pred: continue
                 
+                # 3. Datos reales actuales
+                dato_real = '-'
+                if ult_captura:
+                    lectura = LecturaEstacion.objects.filter(captura=ult_captura, estacion=est).first()
+                    if lectura:
+                        if tipo_busqueda == 'bici':
+                            dato_real = lectura.bicis_disponibles
+                        else:
+                            dato_real = lectura.anclajes_libres
+
                 prob = pred['pct_bici_num'] if tipo_busqueda == 'bici' else pred['pct_hueco_num']
+                
+                # Solo sugerimos si la probabilidad es BUENA (>= 60%)
                 if prob >= 60:
                     candidatas.append({
                         'nombre': est.nombre,
                         'distancia': int(dist),
                         'tiempo_pie': int(dist / 80),
                         'nivel': pred['nivel_bici'] if tipo_busqueda == 'bici' else pred['nivel_hueco'],
-                        'media': pred['media_bicis'] if tipo_busqueda == 'bici' else pred['media_anclajes']
+                        'dato_real': dato_real  # <--- NUEVO CAMPO
                     })
 
         candidatas.sort(key=lambda x: x['distancia']) 
@@ -238,7 +258,7 @@ def planificador(request):
             do = calcular_prediccion_precisa(o_id, dia, hora, minuto)
             dd = calcular_prediccion_precisa(d_id, dia_llegada, llegada.hour, llegada.minute)
             
-            # --- CORRECCIÓN: USAR .FIRST() PARA OBTENER EL DATO MÁS RECIENTE ---
+            # DATOS REALES (AHORA MISMO)
             ult_captura = Captura.objects.order_by('-timestamp').first()
             lectura_o = None
             lectura_d = None
@@ -305,7 +325,6 @@ def radar_carga(request):
     except: return JsonResponse({'error': 'Coords'}, status=400)
     candidatas = sorted([(haversine(lat, lon, float(e.latitud), float(e.longitud)), e) for e in Estacion.objects.all()], key=lambda x: x[0])[:3]
     
-    # --- CORRECCIÓN: USAR .FIRST() TAMBIÉN AQUÍ ---
     res, ult = [], Captura.objects.order_by('-timestamp').first()
     
     if ult:
