@@ -9,4 +9,6 @@ urlpatterns = [
     path('estacion/<int:estacion_id>/', views.detalle_estacion, name='detalle_estacion'),
     path('mapa/', views.mapa_estaciones, name='mapa_estaciones'),
     path('planificador/', views.planificador, name='planificador'),
+    path('radar/', views.radar_index, name='radar'),
+    path('radar-carga/', views.radar_carga, name='radar_carga'),
 ]

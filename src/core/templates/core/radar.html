@@ -1,0 +1,128 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Radar Bizi - Cerca de ti{% endblock %}
+
+{% block content %}
+<div class="container py-4 text-center">
+    
+    <div class="mb-5">
+        <h2 class="fw-bold text-primary">📡 Radar Bizi</h2>
+        <p class="text-muted">Encuentra bicis o huecos cerca de tu posición actual.</p>
+    </div>
+
+    <button id="btnLocalizar" class="btn btn-primary btn-lg rounded-pill px-5 py-3 shadow mb-4">
+        <i class="bi bi-geo-alt-fill me-2"></i> Localizarme ahora
+    </button>
+    
+    <div id="loading" class="d-none">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="text-muted mt-2 small">Escaneando zona...</p>
+    </div>
+
+    <div id="errorMsg" class="alert alert-danger d-none mt-3"></div>
+
+    <div id="radarResultados" class="row justify-content-center mt-4 g-3 text-start">
+        </div>
+
+</div>
+
+<script>
+    document.getElementById('btnLocalizar').addEventListener('click', function() {
+        const btn = this;
+        const loading = document.getElementById('loading');
+        const errorMsg = document.getElementById('errorMsg');
+        const container = document.getElementById('radarResultados');
+
+        if (!navigator.geolocation) {
+            errorMsg.textContent = "Tu navegador no soporta geolocalización.";
+            errorMsg.classList.remove('d-none');
+            return;
+        }
+
+        btn.classList.add('d-none');
+        loading.classList.remove('d-none');
+        errorMsg.classList.add('d-none');
+        container.innerHTML = '';
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+
+                // Llamada AJAX al backend
+                fetch(`/radar-carga/?lat=${lat}&lon=${lon}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        loading.classList.add('d-none');
+                        
+                        if (data.estaciones.length === 0) {
+                            errorMsg.textContent = "No hay datos recientes disponibles.";
+                            errorMsg.classList.remove('d-none');
+                            return;
+                        }
+
+                        // Generar HTML de las tarjetas
+                        data.estaciones.forEach(est => {
+                            const cardHtml = `
+                                <div class="col-md-6 col-lg-4">
+                                    <div class="card h-100 shadow-sm border-0">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                <h5 class="card-title text-truncate fw-bold mb-0 w-75">${est.nombre}</h5>
+                                                <span class="badge bg-light text-dark border">${est.distancia}m</span>
+                                            </div>
+                                            <p class="small text-muted mb-3">
+                                                <i class="bi bi-person-walking"></i> ~${est.tiempo_pie} min andando
+                                            </p>
+                                            
+                                            <div class="d-flex justify-content-between text-center mb-3">
+                                                <div class="bg-primary bg-opacity-10 p-2 rounded w-45">
+                                                    <span class="d-block fw-bold fs-4 text-primary">${est.bicis}</span>
+                                                    <small class="text-muted">Bicis</small>
+                                                </div>
+                                                <div class="bg-secondary bg-opacity-10 p-2 rounded w-45">
+                                                    <span class="d-block fw-bold fs-4 text-secondary">${est.anclajes}</span>
+                                                    <small class="text-muted">Huecos</small>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <small class="text-muted">${est.tendencia}</small>
+                                                <a href="${est.url}" class="btn btn-sm btn-outline-primary rounded-pill">Ver detalle</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            container.innerHTML += cardHtml;
+                        });
+                        
+                        // Botón reintentar
+                        container.innerHTML += `
+                            <div class="col-12 text-center mt-4">
+                                <button onclick="location.reload()" class="btn btn-link text-muted">Nueva búsqueda</button>
+                            </div>
+                        `;
+
+                    })
+                    .catch(err => {
+                        loading.classList.add('d-none');
+                        errorMsg.textContent = "Error al conectar con el servidor.";
+                        errorMsg.classList.remove('d-none');
+                        btn.classList.remove('d-none');
+                    });
+            },
+            (error) => {
+                loading.classList.add('d-none');
+                btn.classList.remove('d-none');
+                let msg = "Error desconocido.";
+                if (error.code === 1) msg = "Necesitamos permiso de ubicación.";
+                if (error.code === 2) msg = "Ubicación no disponible.";
+                if (error.code === 3) msg = "Tiempo de espera agotado.";
+                errorMsg.textContent = msg;
+                errorMsg.classList.remove('d-none');
+            }
+        );
+    });
+</script>
+{% endblock %}

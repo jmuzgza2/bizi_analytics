@@ -222,152 +222,129 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/date-fns@3.0.0/locale/es/index.js"></script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         
-        // --- 1. LÓGICA DE FAVORITOS ---
+        // 1. TOOLTIPS DEL MAPA DE CALOR (Necesarios para ver los datos)
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
+
+        // 2. LÓGICA DE FAVORITOS
         const btnFav = document.getElementById('btnFavDetalle');
         const stationId = btnFav.getAttribute('data-id');
         const STORAGE_KEY = 'bizi_favoritos_lista';
 
-        function getFavoritos() {
-            return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-        }
-
         function updateFavIcon() {
-            const favs = getFavoritos();
+            const favs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
             if (favs.includes(stationId)) {
                 btnFav.innerHTML = '❤️';
                 btnFav.classList.remove('btn-outline-secondary');
                 btnFav.classList.add('btn-outline-danger');
-                btnFav.style.borderWidth = "2px";
             } else {
                 btnFav.innerHTML = '🤍';
                 btnFav.classList.add('btn-outline-secondary');
                 btnFav.classList.remove('btn-outline-danger');
-                btnFav.style.borderWidth = "1px";
             }
         }
 
         btnFav.addEventListener('click', function() {
-            let favs = getFavoritos();
+            let favs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
             if (favs.includes(stationId)) {
-                favs = favs.filter(id => id !== stationId); // Quitar
+                favs = favs.filter(id => id !== stationId);
             } else {
-                favs.push(stationId); // Añadir
+                favs.push(stationId);
             }
             localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
             updateFavIcon();
         });
-
-        // Inicializar estado al cargar
         updateFavIcon();
 
-
-        // --- 2. CONFIGURACIÓN DEL GRÁFICO ---
+        // 3. GRÁFICO (VERSIÓN SEGURA SIN LOCALE EXTERNO)
         const ctx = document.getElementById('graficoEstacion').getContext('2d');
-        
-        // Datos desde Django
         const dataBicis = {{ dataset_bicis|safe }};
         const dataAnclajes = {{ dataset_anclajes|safe }};
-        const rangoActual = "{{ rango_actual }}"; // '24h' o '7d'
+        const rangoActual = "{{ rango_actual }}"; 
 
-        // Configuración visual según rango
-        const pointRadius = (rangoActual === '7d') ? 0 : 3;
-
-        // Creamos el gráfico
         const chart = new Chart(ctx, {
             type: 'line',
             data: {
                 datasets: [
                     {
-                        label: 'Bicis Disponibles',
+                        label: 'Bicis',
                         data: dataBicis,
-                        borderColor: '#0d6efd', // Azul Primary
+                        borderColor: '#0d6efd',
                         backgroundColor: 'rgba(13, 110, 253, 0.1)',
                         fill: true,
                         tension: 0.3,
-                        pointRadius: pointRadius, 
+                        pointRadius: (rangoActual === '7d') ? 0 : 3,
                         pointHitRadius: 10,
                         borderWidth: 2
                     },
                     {
-                        label: 'Anclajes Libres',
+                        label: 'Anclajes',
                         data: dataAnclajes,
-                        borderColor: '#6c757d', // Gris Secondary
+                        borderColor: '#6c757d',
                         backgroundColor: 'rgba(108, 117, 125, 0.05)',
                         fill: true,
                         tension: 0.3,
-                        pointRadius: pointRadius,
+                        pointRadius: (rangoActual === '7d') ? 0 : 3,
                         pointHitRadius: 10,
-                        borderWidth: 2,
-                        hidden: false // Visible por defecto
+                        borderWidth: 2
                     }
                 ]
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false, // Permitir altura personalizada
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                plugins: {
-                    legend: {
-                        display: false // Ocultamos la leyenda nativa porque usamos nuestros botones
-                    },
-                    tooltip: {
-                        callbacks: {
-                            title: function(context) {
-                                // Formato de fecha en tooltip
-                                const date = new Date(context[0].parsed.x);
-                                return date.toLocaleString('es-ES', { 
-                                    weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
-                                });
-                            }
-                        }
-                    }
-                },
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                // ADAPTER SIN LOCALE EXTERNO PARA EVITAR ERRORES
                 scales: {
                     x: {
                         type: 'time',
                         time: {
                             displayFormats: {
                                 hour: 'HH:mm',
-                                day: 'ccc dd' // Ej: Lun 12
+                                day: 'dd/MM' // Día/Mes numérico (ej: 04/01) - Seguro y universal
                             },
                             tooltipFormat: 'dd/MM HH:mm'
                         },
-                        grid: { display: false }
+                        grid: {
+                            color: function(context) {
+                                // Línea oscura a medianoche
+                                if (context.tick && context.tick.value) {
+                                    const d = new Date(context.tick.value);
+                                    if (d.getHours() === 0 && d.getMinutes() === 0) return 'rgba(0,0,0, 0.3)';
+                                }
+                                return 'rgba(0,0,0, 0.05)';
+                            },
+                            lineWidth: function(context) {
+                                if (context.tick && context.tick.value) {
+                                    const d = new Date(context.tick.value);
+                                    if (d.getHours() === 0 && d.getMinutes() === 0) return 2;
+                                }
+                                return 1;
+                            }
+                        }
                     },
-                    y: {
-                        beginAtZero: true,
-                        title: { display: false }
-                    }
-                }
+                    y: { beginAtZero: true, grid: { color: '#f0f0f0' } }
+                },
+                plugins: { legend: { display: false } }
             }
         });
 
-        // --- LÓGICA DE LOS INTERRUPTORES ---
-        
-        const checkBicis = document.getElementById('checkBicis');
-        const checkAnclajes = document.getElementById('checkAnclajes');
-
-        // Función para cambiar visibilidad
-        function toggleDataset(index, isVisible) {
-            chart.getDatasetMeta(index).hidden = !isVisible;
-            chart.update();
-        }
-
-        checkBicis.addEventListener('change', function() {
-            toggleDataset(0, this.checked); // Dataset 0 es Bicis
+        // Toggles
+        document.getElementById('checkBicis').addEventListener('change', function() { 
+            chart.getDatasetMeta(0).hidden = !this.checked; 
+            chart.update(); 
         });
-
-        checkAnclajes.addEventListener('change', function() {
-            toggleDataset(1, this.checked); // Dataset 1 es Anclajes
+        document.getElementById('checkAnclajes').addEventListener('change', function() { 
+            chart.getDatasetMeta(1).hidden = !this.checked; 
+            chart.update(); 
         });
-
     });
 </script>
 {% endblock %}
