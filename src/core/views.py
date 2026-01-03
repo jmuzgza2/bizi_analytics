@@ -132,39 +132,168 @@ def mapa_estaciones(request):
     context = {'estaciones_static': json.dumps(estaciones_static, cls=DjangoJSONEncoder), 'timeline_json': json.dumps(timeline_data, cls=DjangoJSONEncoder)}
     return render(request, 'core/mapa_estaciones.html', context)
 
-# --- PLANIFICADOR ---
+# --- PLANIFICADOR / ORÁCULO ---
+
+def obtener_nivel_probabilidad(porcentaje):
+    """Convierte un % numérico en una escala cualitativa y estilos."""
+    if porcentaje >= 80:
+        return {'texto': 'Muy Alta', 'clase': 'success', 'color': '#198754', 'ancho': 100} # Verde Oscuro
+    elif porcentaje >= 60:
+        return {'texto': 'Alta', 'clase': 'success', 'color': '#75b798', 'ancho': 75}    # Verde Claro
+    elif porcentaje >= 40:
+        return {'texto': 'Media', 'clase': 'warning', 'color': '#ffc107', 'ancho': 50}   # Amarillo
+    elif porcentaje >= 20:
+        return {'texto': 'Baja', 'clase': 'danger', 'color': '#fd7e14', 'ancho': 25}     # Naranja
+    else:
+        return {'texto': 'Muy Baja', 'clase': 'danger', 'color': '#dc3545', 'ancho': 10} # Rojo
 
 def calcular_prediccion_precisa(estacion_id, dia, hora, minuto):
+    """
+    Analiza registro solicitado y vecinos (±4 min) de últimos 60 días.
+    Devuelve objeto enriquecido con niveles cualitativos.
+    """
     dummy = datetime.datetime(2000, 1, 1, hora, minuto)
     start = (dummy - timedelta(minutes=4)).time()
     end = (dummy + timedelta(minutes=4)).time()
-    qs = LecturaEstacion.objects.filter(estacion__id_externo=estacion_id, captura__timestamp__gte=timezone.now()-timedelta(days=60), captura__timestamp__week_day=dia, captura__timestamp__time__range=(start, end))
+    
+    qs = LecturaEstacion.objects.filter(
+        estacion__id_externo=estacion_id, 
+        captura__timestamp__gte=timezone.now()-timedelta(days=60), 
+        captura__timestamp__week_day=dia, 
+        captura__timestamp__time__range=(start, end)
+    )
+    
     if not qs.exists(): return None
+    
     stats = qs.aggregate(mb=Avg('bicis_disponibles'), ma=Avg('anclajes_libres'))
     mb, ma = round(stats['mb'] or 0, 1), round(stats['ma'] or 0, 1)
+    
     antes = qs.filter(captura__timestamp__time__lt=dummy.time()).aggregate(m=Avg('bicis_disponibles'))['m'] or mb
     despues = qs.filter(captura__timestamp__time__gt=dummy.time()).aggregate(m=Avg('bicis_disponibles'))['m'] or mb
-    tendencia = "Subiendo 📈" if (despues - antes) > 0.3 else "Bajando 📉" if (despues - antes) < -0.3 else "Estable 😐"
-    return {'prob_bici': min(100, int((mb/5)*100)), 'prob_hueco': min(100, int((ma/5)*100)), 'media_bicis': mb, 'media_anclajes': ma, 'tendencia': tendencia}
+    diff = despues - antes
+    
+    tendencia = "Subiendo 📈" if diff > 0.3 else "Bajando 📉" if diff < -0.3 else "Estable 😐"
+    
+    # Cálculos numéricos internos
+    pct_bici = min(100, int((mb/5.0)*100))
+    pct_hueco = min(100, int((ma/5.0)*100))
+
+    return {
+        'pct_bici_num': pct_bici,
+        'pct_hueco_num': pct_hueco,
+        'nivel_bici': obtener_nivel_probabilidad(pct_bici),   # Nuevo objeto visual
+        'nivel_hueco': obtener_nivel_probabilidad(pct_hueco), # Nuevo objeto visual
+        'media_bicis': mb, 
+        'media_anclajes': ma, 
+        'tendencia': tendencia
+    }
+
+def buscar_alternativas(target_estacion_id, dia, hora, minuto, tipo_busqueda):
+    """
+    Busca estaciones cercanas (max 500m) que tengan MEJOR probabilidad.
+    tipo_busqueda: 'bici' (para origen) o 'hueco' (para destino)
+    """
+    try:
+        origen = Estacion.objects.get(id_externo=target_estacion_id)
+        todas = Estacion.objects.exclude(id_externo=target_estacion_id)
+        candidatas = []
+
+        # 1. Filtro rápido de distancia (fuerza bruta optimizada)
+        for est in todas:
+            dist = haversine(float(origen.latitud), float(origen.longitud), float(est.latitud), float(est.longitud))
+            if dist <= 500: # Solo vecinas a 5 min andando
+                # 2. Predecir para esta candidata
+                pred = calcular_prediccion_precisa(est.id_externo, dia, hora, minuto)
+                if not pred: continue
+                
+                # 3. Evaluar si merece la pena sugerirla
+                prob = pred['pct_bici_num'] if tipo_busqueda == 'bici' else pred['pct_hueco_num']
+                
+                # Solo sugerimos si la probabilidad es ALTA (> 60%)
+                if prob >= 60:
+                    candidatas.append({
+                        'nombre': est.nombre,
+                        'distancia': int(dist),
+                        'tiempo_pie': int(dist / 80), # 80m/min
+                        'nivel': pred['nivel_bici'] if tipo_busqueda == 'bici' else pred['nivel_hueco'],
+                        'media': pred['media_bicis'] if tipo_busqueda == 'bici' else pred['media_anclajes']
+                    })
+
+        # Ordenar por probabilidad (mayor a menor) y luego por distancia
+        # Priorizamos la seguridad de tener bici sobre andar 50 metros más
+        candidatas.sort(key=lambda x: x['distancia']) 
+        return candidatas[:2] # Devolvemos las 2 mejores
+    except:
+        return []
 
 def planificador(request):
     estaciones = Estacion.objects.all().order_by('nombre')
     res = None
+    
     if 'origen' in request.GET and 'destino' in request.GET:
         try:
             o_id, d_id = request.GET.get('origen'), request.GET.get('destino')
-            dia, hora, minuto = int(request.GET.get('dia')), int(request.GET.get('hora')), int(request.GET.get('minuto', 0))
+            dia = int(request.GET.get('dia'))
+            hora = int(request.GET.get('hora'))
+            minuto = int(request.GET.get('minuto', 0))
+            
             obj_o, obj_d = Estacion.objects.get(id_externo=o_id), Estacion.objects.get(id_externo=d_id)
-            dist = haversine(float(obj_o.latitud), float(obj_o.longitud), float(obj_d.latitud), float(obj_d.longitud)) * 1.4
-            mins = max(5, int(dist/200))
-            llegada = datetime.datetime(2024,1,1,hora,minuto) + timedelta(minutes=mins)
+            
+            # Viaje
+            dist_metros = haversine(float(obj_o.latitud), float(obj_o.longitud), float(obj_d.latitud), float(obj_d.longitud))
+            mins_viaje = max(5, int((dist_metros * 1.4) / 200))
+            
+            # Llegada
+            llegada = datetime.datetime(2024,1,1,hora,minuto) + timedelta(minutes=mins_viaje)
             dia_llegada = dia + 1 if llegada.day != 1 else dia
             if dia_llegada > 7: dia_llegada = 1
-            do, dd = calcular_prediccion_precisa(o_id, dia, hora, minuto), calcular_prediccion_precisa(d_id, dia_llegada, llegada.hour, llegada.minute)
-            res = {'viaje': {'minutos': mins, 'hora_salida': f"{hora:02}:{minuto:02}", 'hora_llegada': f"{llegada.hour:02}:{llegada.minute:02}"}, 'origen': {'nombre': obj_o.nombre, 'pct': do['prob_bici'], 'media': do['media_bicis'], 'tendencia': do['tendencia'], 'color': 'success' if do['prob_bici']>60 else 'warning' if do['prob_bici']>20 else 'danger'}, 'destino': {'nombre': obj_d.nombre, 'pct': dd['prob_hueco'], 'media': dd['media_anclajes'], 'tendencia': dd['tendencia'], 'color': 'success' if dd['prob_hueco']>60 else 'warning' if dd['prob_hueco']>20 else 'danger'}}
-        except: pass
-    return render(request, 'core/planificador.html', {'estaciones': estaciones, 'resultado': res, 'form_data': request.GET})
 
+            # Predicciones
+            do = calcular_prediccion_precisa(o_id, dia, hora, minuto)
+            dd = calcular_prediccion_precisa(d_id, dia_llegada, llegada.hour, llegada.minute)
+            
+            # --- LÓGICA DE SUGERENCIAS ---
+            sugerencias_origen = []
+            sugerencias_destino = []
+
+            # Si probabilidad < 40% (Baja o Muy Baja), buscamos alternativas
+            if do and do['pct_bici_num'] < 40:
+                sugerencias_origen = buscar_alternativas(o_id, dia, hora, minuto, 'bici')
+            
+            if dd and dd['pct_hueco_num'] < 40:
+                sugerencias_destino = buscar_alternativas(d_id, dia_llegada, llegada.hour, llegada.minute, 'hueco')
+
+            # Manejo de vacíos visuales
+            if not do: do = {'nivel_bici': {'texto': 'Sin datos', 'clase': 'secondary', 'color': '#ccc', 'ancho': 0}, 'media_bicis': 0, 'tendencia': '-'}
+            if not dd: dd = {'nivel_hueco': {'texto': 'Sin datos', 'clase': 'secondary', 'color': '#ccc', 'ancho': 0}, 'media_anclajes': 0, 'tendencia': '-'}
+
+            res = {
+                'viaje': {
+                    'minutos': mins_viaje, 
+                    'hora_salida': f"{hora:02}:{minuto:02}", 
+                    'hora_llegada': f"{llegada.hour:02}:{llegada.minute:02}",
+                    'cambio_dia': (dia_llegada != dia)
+                },
+                'origen': {
+                    'nombre': obj_o.nombre, 
+                    'nivel': do['nivel_bici'], # Objeto completo con texto y color
+                    'media': do['media_bicis'], 
+                    'tendencia': do['tendencia'],
+                    'alternativas': sugerencias_origen
+                },
+                'destino': {
+                    'nombre': obj_d.nombre, 
+                    'nivel': dd['nivel_hueco'], 
+                    'media': dd['media_anclajes'], 
+                    'tendencia': dd['tendencia'],
+                    'alternativas': sugerencias_destino
+                }
+            }
+        except Exception as e:
+            print(f"Error: {e}")
+            pass
+            
+    return render(request, 'core/planificador.html', {'estaciones': estaciones, 'resultado': res, 'form_data': request.GET})
 # --- RADAR ---
 def radar_index(request): return render(request, 'core/radar.html')
 
