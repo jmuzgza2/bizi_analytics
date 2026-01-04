@@ -216,7 +216,7 @@ def radar_carga(request):
     except (TypeError, ValueError): 
         return JsonResponse({'error': 'Coordenadas inválidas'}, status=400)
 
-    candidatas = sorted([(haversine(lat, lon, float(e.latitud), float(e.longitud)), e) for e in Estacion.objects.all()], key=lambda x: x[0])[:3]
+    candidatas = sorted([(haversine(lat, lon, float(e.latitud), float(e.longitud)), e) for e in Estacion.objects.all()], key=lambda x: x[0])[:5]
     
     # Filtro de seguridad: ignorar capturas vacías
     ult = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()

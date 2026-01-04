@@ -2,13 +2,9 @@ services:
   db:
     image: postgres:15-alpine
     container_name: bizi_db
-    # CAMBIO CLAVE: Usamos env_file en lugar de environment
-    # Así es igual que en Producción y no dependes de variables de tu shell
     env_file:
       - .env
     ports:
-      # Mantenemos el 5433 externo para que no choque con tu Postgres local si tienes uno
-      # En AWS este puerto estará abierto en el contenedor, pero cerrado por el Firewall. No pasa nada.
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -17,7 +13,8 @@ services:
   web:
     build: .
     container_name: bizi_web
-    command: python manage.py runserver 0.0.0.0:8000
+    # --- CAMBIO IMPORTANTE ---
+    # Hemos borrado 'command:'. Ahora el Dockerfile y entrypoint.sh deciden qué ejecutar.
     volumes:
       - ./src:/app
     ports:
@@ -31,6 +28,8 @@ services:
   monitor:
     build: .
     container_name: bizi_monitor
+    # Aquí SÍ mantenemos el command porque queremos ejecutar una tarea específica
+    # y no el servidor web.
     command: python manage.py iniciar_monitor
     volumes:
       - ./src:/app
