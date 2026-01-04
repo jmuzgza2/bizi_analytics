@@ -36,6 +36,12 @@
                 <span class="fs-6 me-1">🔮</span> <span class="d-none d-sm-inline" style="font-size: 0.9rem;">Oráculo</span>
             </a>
 
+           
+        <a href="{% url 'radar' %}" 
+               class="btn {% if url_name == 'radar' %}btn-light text-primary{% else %}btn-outline-light{% endif %} btn-sm fw-bold px-2 rounded-pill shadow-sm d-flex align-items-center">
+                <i class="bi bi-broadcast fs-6 me-1"></i> <span class="d-none d-sm-inline" style="font-size: 0.9rem;">Radar</span>
+            </a>
+
             
             {% endwith %}
         </div>

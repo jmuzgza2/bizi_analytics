@@ -3,92 +3,115 @@
 {% block title %}Radar Bizi - Cerca de ti{% endblock %}
 
 {% block content %}
-<div class="container py-4 text-center">
+<div class="container py-4 text-center" style="max-width: 600px;">
     
     <div class="mb-5">
         <h2 class="fw-bold text-primary">📡 Radar Bizi</h2>
-        <p class="text-muted">Encuentra bicis o huecos cerca de tu posición actual.</p>
+        <p class="text-muted">Encuentra bicis o huecos a tu alrededor.</p>
     </div>
 
-    <button id="btnLocalizar" class="btn btn-primary btn-lg rounded-pill px-5 py-3 shadow mb-4">
-        <i class="bi bi-geo-alt-fill me-2"></i> Localizarme ahora
-    </button>
+    <div id="pantallaInicial">
+        <button id="btnLocalizar" class="btn btn-primary btn-lg rounded-pill px-5 py-3 shadow mb-4 pulse-animation">
+            <i class="bi bi-geo-alt-fill me-2"></i> Localizarme
+        </button>
+        <p class="small text-muted">Necesitamos permiso para usar tu ubicación GPS.</p>
+    </div>
     
     <div id="loading" class="d-none">
-        <div class="spinner-border text-primary" role="status"></div>
-        <p class="text-muted mt-2 small">Escaneando zona...</p>
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+        <p class="text-muted mt-3 fw-bold">Escaneando zona...</p>
     </div>
 
-    <div id="errorMsg" class="alert alert-danger d-none mt-3"></div>
+    <div id="errorMsg" class="alert alert-danger d-none mt-3 shadow-sm text-start"></div>
 
     <div id="radarResultados" class="row justify-content-center mt-4 g-3 text-start">
         </div>
 
 </div>
 
+{% endblock %}
+
+{% block scripts %}
 <script>
     document.getElementById('btnLocalizar').addEventListener('click', function() {
-        const btn = this;
+        const btnContainer = document.getElementById('pantallaInicial');
         const loading = document.getElementById('loading');
         const errorMsg = document.getElementById('errorMsg');
         const container = document.getElementById('radarResultados');
 
+        // 1. Validar soporte
         if (!navigator.geolocation) {
-            errorMsg.textContent = "Tu navegador no soporta geolocalización.";
-            errorMsg.classList.remove('d-none');
+            mostrarError("Tu navegador no soporta geolocalización.");
             return;
         }
 
-        btn.classList.add('d-none');
+        // 2. Cambiar interfaz a "Cargando"
+        btnContainer.classList.add('d-none');
         loading.classList.remove('d-none');
         errorMsg.classList.add('d-none');
         container.innerHTML = '';
 
+        // 3. Pedir posición
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
 
-                // Llamada AJAX al backend
+                // 4. Llamar al Backend
                 fetch(`/radar-carga/?lat=${lat}&lon=${lon}`)
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) throw new Error("Error en el servidor");
+                        return response.json();
+                    })
                     .then(data => {
                         loading.classList.add('d-none');
                         
                         if (data.estaciones.length === 0) {
-                            errorMsg.textContent = "No hay datos recientes disponibles.";
-                            errorMsg.classList.remove('d-none');
+                            mostrarError("No se encontraron estaciones cercanas con datos recientes.");
                             return;
                         }
 
-                        // Generar HTML de las tarjetas
+                        // 5. Renderizar Tarjetas
                         data.estaciones.forEach(est => {
+                            // --- NUEVA LÓGICA DE COLORES (Semáforo) ---
+                            // 0 -> danger (rojo)
+                            // 1-2 -> warning (naranja)
+                            // 3+ -> success (verde)
+                            let colorBici = est.bicis === 0 ? 'danger' : (est.bicis <= 2 ? 'warning' : 'success');
+                            let colorAnclaje = est.anclajes === 0 ? 'danger' : (est.anclajes <= 2 ? 'warning' : 'success');
+
                             const cardHtml = `
-                                <div class="col-md-6 col-lg-4">
-                                    <div class="card h-100 shadow-sm border-0">
+                                <div class="col-12 fade-in">
+                                    <div class="card shadow-sm border-0 h-100">
                                         <div class="card-body">
                                             <div class="d-flex justify-content-between align-items-start mb-2">
-                                                <h5 class="card-title text-truncate fw-bold mb-0 w-75">${est.nombre}</h5>
-                                                <span class="badge bg-light text-dark border">${est.distancia}m</span>
+                                                <h5 class="card-title fw-bold text-primary mb-0 w-75 text-truncate">
+                                                    <a href="${est.url}" class="text-decoration-none text-primary stretched-link">
+                                                        ${est.nombre}
+                                                    </a>
+                                                </h5>
+                                                <span class="badge bg-light text-dark border">
+                                                    ${est.distancia}m
+                                                </span>
                                             </div>
+                                            
                                             <p class="small text-muted mb-3">
                                                 <i class="bi bi-person-walking"></i> ~${est.tiempo_pie} min andando
                                             </p>
                                             
-                                            <div class="d-flex justify-content-between text-center mb-3">
-                                                <div class="bg-primary bg-opacity-10 p-2 rounded w-45">
-                                                    <span class="d-block fw-bold fs-4 text-primary">${est.bicis}</span>
-                                                    <small class="text-muted">Bicis</small>
+                                            <div class="row g-2 text-center">
+                                                <div class="col-6">
+                                                    <div class="p-2 rounded bg-${colorBici} bg-opacity-10 border border-${colorBici}">
+                                                        <span class="d-block fw-bold fs-4 text-${colorBici}">${est.bicis}</span>
+                                                        <small class="text-muted small text-uppercase">Bicis</small>
+                                                    </div>
                                                 </div>
-                                                <div class="bg-secondary bg-opacity-10 p-2 rounded w-45">
-                                                    <span class="d-block fw-bold fs-4 text-secondary">${est.anclajes}</span>
-                                                    <small class="text-muted">Huecos</small>
+                                                <div class="col-6">
+                                                    <div class="p-2 rounded bg-${colorAnclaje} bg-opacity-10 border border-${colorAnclaje}">
+                                                        <span class="d-block fw-bold fs-4 text-${colorAnclaje}">${est.anclajes}</span>
+                                                        <small class="text-muted small text-uppercase">Huecos</small>
+                                                    </div>
                                                 </div>
-                                            </div>
-
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <small class="text-muted">${est.tendencia}</small>
-                                                <a href="${est.url}" class="btn btn-sm btn-outline-primary rounded-pill">Ver detalle</a>
                                             </div>
                                         </div>
                                     </div>
@@ -97,32 +120,60 @@
                             container.innerHTML += cardHtml;
                         });
                         
-                        // Botón reintentar
+                        // Botón flotante para buscar otra vez
                         container.innerHTML += `
                             <div class="col-12 text-center mt-4">
-                                <button onclick="location.reload()" class="btn btn-link text-muted">Nueva búsqueda</button>
+                                <button onclick="location.reload()" class="btn btn-outline-primary rounded-pill btn-sm">
+                                    <i class="bi bi-arrow-clockwise"></i> Actualizar Ubicación
+                                </button>
                             </div>
                         `;
 
                     })
                     .catch(err => {
                         loading.classList.add('d-none');
-                        errorMsg.textContent = "Error al conectar con el servidor.";
-                        errorMsg.classList.remove('d-none');
-                        btn.classList.remove('d-none');
+                        mostrarError("Error de conexión o sin datos recientes. Inténtalo de nuevo.");
+                        console.error(err);
                     });
             },
             (error) => {
                 loading.classList.add('d-none');
-                btn.classList.remove('d-none');
                 let msg = "Error desconocido.";
-                if (error.code === 1) msg = "Necesitamos permiso de ubicación.";
-                if (error.code === 2) msg = "Ubicación no disponible.";
-                if (error.code === 3) msg = "Tiempo de espera agotado.";
-                errorMsg.textContent = msg;
-                errorMsg.classList.remove('d-none');
-            }
+                switch(error.code) {
+                    case error.PERMISSION_DENIED: msg = "Necesitamos permiso de ubicación para funcionar."; break;
+                    case error.POSITION_UNAVAILABLE: msg = "La información de ubicación no está disponible."; break;
+                    case error.TIMEOUT: msg = "Se agotó el tiempo de espera al obtener la ubicación."; break;
+                }
+                mostrarError(msg);
+                // Restaurar botón tras unos segundos
+                setTimeout(() => {
+                    btnContainer.classList.remove('d-none');
+                    errorMsg.classList.add('d-none');
+                }, 4000);
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
     });
+
+    function mostrarError(mensaje) {
+        const errorDiv = document.getElementById('errorMsg');
+        errorDiv.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i> ${mensaje}`;
+        errorDiv.classList.remove('d-none');
+    }
 </script>
+
+<style>
+    .pulse-animation {
+        animation: pulse-shadow 2s infinite;
+    }
+    @keyframes pulse-shadow {
+        0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); }
+    }
+    /* Ajuste para que el fondo de color se vea bien en modo claro */
+    .bg-opacity-10 {
+        --bs-bg-opacity: 0.15; 
+    }
+</style>
 {% endblock %}
