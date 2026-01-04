@@ -21,3 +21,7 @@ postgres_data/
 
 # --- Base de datos SQLite (por si acaso se creó alguna vez) ---
 db.sqlite3
+
+
+src/staticfiles/
+staticfiles/

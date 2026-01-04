@@ -25,5 +25,5 @@ if [ "$DEBUG" = "True" ] || [ "$DEBUG" = "true" ] || [ "$DEBUG" = "1" ]; then
 else
     echo "🌍 MODO PRODUCCIÓN: Arrancando Gunicorn..."
     # Asegúrate de que 'core.wsgi' es correcto para tu proyecto
-    exec gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3
 fi
