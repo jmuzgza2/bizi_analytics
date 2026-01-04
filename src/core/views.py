@@ -111,7 +111,8 @@ def calcular_prediccion_precisa(estacion_id, dia, hora, minuto):
 def buscar_alternativas(target_id, dia, hora, minuto, tipo):
     try:
         origen = Estacion.objects.get(id_externo=target_id)
-        ult_captura = Captura.objects.order_by('-timestamp').first()
+        # Filtro de seguridad para datos reales
+        ult_captura = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()
         candidatas = []
         for est in Estacion.objects.exclude(id_externo=target_id):
             dist = haversine(float(origen.latitud), float(origen.longitud), float(est.latitud), float(est.longitud))
@@ -155,7 +156,8 @@ def planificador(request):
             if dia_llegada > 7: dia_llegada = 1
 
             # 3. REAL vs HISTÓRICO (Lógica Híbrida)
-            ult = Captura.objects.order_by('-timestamp').first()
+            # Filtro de seguridad: Solo capturas con lecturas
+            ult = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()
             ro, rd = {'b': 0, 'a': 0}, {'b': 0, 'a': 0}
             so_real, sd_real, hay_real = 0, 0, False
             
@@ -175,15 +177,16 @@ def planificador(request):
             so_hist = do_hist['pct_bici_num'] if do_hist else 0
             sd_hist = dd_hist['pct_hueco_num'] if dd_hist else 0
 
-            # --- SMART WEIGHTING (20 min threshold) ---
+            # --- SMART WEIGHTING (LOGICA 20 MINUTOS) ---
             peso_real, fuente = 0.0, "Histórico 📚"
             
-            # Verificamos si la petición es "ahora" o cercana
+            # Verificar si la petición es "ahora" o cercana
             if mins_diff > -20 and mins_diff < 1440:
                 if mins_diff < 20: 
                     peso_real = 1.0
                     fuente = "Tiempo Real 📡"
                 elif mins_diff < 120: 
+                    # Entre 20 min y 2 horas: Híbrido
                     peso_real = 1.0 - ((mins_diff - 20)/100.0)
                     fuente = "Híbrido (Real + Hist) 🧠"
             
@@ -213,13 +216,9 @@ def radar_carga(request):
     except (TypeError, ValueError): 
         return JsonResponse({'error': 'Coordenadas inválidas'}, status=400)
 
-    # 1. Buscar estaciones cercanas
-    candidatas = sorted([
-        (haversine(lat, lon, float(e.latitud), float(e.longitud)), e) 
-        for e in Estacion.objects.all()
-    ], key=lambda x: x[0])[:3]
+    candidatas = sorted([(haversine(lat, lon, float(e.latitud), float(e.longitud)), e) for e in Estacion.objects.all()], key=lambda x: x[0])[:3]
     
-    # 2. Buscar la última captura QUE TENGA LECTURAS
+    # Filtro de seguridad: ignorar capturas vacías
     ult = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()
     
     res = []
@@ -234,43 +233,8 @@ def radar_carga(request):
                     'tiempo_pie': int(dist/80), 
                     'bicis': act.bicis_disponibles, 
                     'anclajes': act.anclajes_libres,
-                    # --- AÑADIMOS COORDENADAS PARA EL MAPA ---
                     'lat': float(est.latitud),
                     'lon': float(est.longitud),
-                    # ----------------------------------------
-                    'url': reverse('detalle_estacion', args=[est.id_externo])
-                })
-    
-    return JsonResponse({'estaciones': res})
-    try: 
-        lat = float(request.GET.get('lat'))
-        lon = float(request.GET.get('lon'))
-    except (TypeError, ValueError): 
-        return JsonResponse({'error': 'Coordenadas inválidas'}, status=400)
-
-    # 1. Buscar estaciones cercanas
-    candidatas = sorted([
-        (haversine(lat, lon, float(e.latitud), float(e.longitud)), e) 
-        for e in Estacion.objects.all()
-    ], key=lambda x: x[0])[:3]
-    
-    # 2. BLINDAJE: Buscar la última captura QUE TENGA LECTURAS
-    # filter(lecturas__isnull=False) asegura que ignoramos capturas vacías/fallidas
-    ult = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()
-    
-    res = []
-    if ult:
-        for dist, est in candidatas:
-            # Buscamos la lectura de esa estación en esa captura segura
-            act = LecturaEstacion.objects.filter(captura=ult, estacion=est).first()
-            if act: 
-                res.append({
-                    'id': est.id_externo, 
-                    'nombre': est.nombre, 
-                    'distancia': int(dist), 
-                    'tiempo_pie': int(dist/80), 
-                    'bicis': act.bicis_disponibles, 
-                    'anclajes': act.anclajes_libres, 
                     'url': reverse('detalle_estacion', args=[est.id_externo])
                 })
     
