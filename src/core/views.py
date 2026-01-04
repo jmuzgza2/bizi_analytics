@@ -219,6 +219,41 @@ def radar_carga(request):
         for e in Estacion.objects.all()
     ], key=lambda x: x[0])[:3]
     
+    # 2. Buscar la última captura QUE TENGA LECTURAS
+    ult = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()
+    
+    res = []
+    if ult:
+        for dist, est in candidatas:
+            act = LecturaEstacion.objects.filter(captura=ult, estacion=est).first()
+            if act: 
+                res.append({
+                    'id': est.id_externo, 
+                    'nombre': est.nombre, 
+                    'distancia': int(dist), 
+                    'tiempo_pie': int(dist/80), 
+                    'bicis': act.bicis_disponibles, 
+                    'anclajes': act.anclajes_libres,
+                    # --- AÑADIMOS COORDENADAS PARA EL MAPA ---
+                    'lat': float(est.latitud),
+                    'lon': float(est.longitud),
+                    # ----------------------------------------
+                    'url': reverse('detalle_estacion', args=[est.id_externo])
+                })
+    
+    return JsonResponse({'estaciones': res})
+    try: 
+        lat = float(request.GET.get('lat'))
+        lon = float(request.GET.get('lon'))
+    except (TypeError, ValueError): 
+        return JsonResponse({'error': 'Coordenadas inválidas'}, status=400)
+
+    # 1. Buscar estaciones cercanas
+    candidatas = sorted([
+        (haversine(lat, lon, float(e.latitud), float(e.longitud)), e) 
+        for e in Estacion.objects.all()
+    ], key=lambda x: x[0])[:3]
+    
     # 2. BLINDAJE: Buscar la última captura QUE TENGA LECTURAS
     # filter(lecturas__isnull=False) asegura que ignoramos capturas vacías/fallidas
     ult = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()

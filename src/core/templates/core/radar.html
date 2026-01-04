@@ -2,10 +2,40 @@
 
 {% block title %}Radar Bizi - Cerca de ti{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<style>
+    #mapaRadar {
+        height: 350px;
+        width: 100%;
+        z-index: 1;
+    }
+    .pulse-animation {
+        animation: pulse-shadow 2s infinite;
+    }
+    @keyframes pulse-shadow {
+        0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); }
+    }
+    /* ESTILOS PARA EL MUÑECO (Usuario) */
+    .custom-user-marker {
+        background-color: #0d6efd; /* Azul primario */
+        color: white;
+        border: 3px solid white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2); /* Sombra más pronunciada */
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-4 text-center" style="max-width: 600px;">
     
-    <div class="mb-5">
+    <div class="mb-4">
         <h2 class="fw-bold text-primary">📡 Radar Bizi</h2>
         <p class="text-muted">Encuentra bicis o huecos a tu alrededor.</p>
     </div>
@@ -24,41 +54,64 @@
 
     <div id="errorMsg" class="alert alert-danger d-none mt-3 shadow-sm text-start"></div>
 
-    <div id="radarResultados" class="row justify-content-center mt-4 g-3 text-start">
+    <div id="mapaContenedor" class="d-none mb-4 fade-in">
+        <div id="mapaRadar" class="rounded shadow border"></div>
+        <div class="d-flex justify-content-center gap-2 mt-3 small text-muted flex-wrap">
+            <div class="d-flex align-items-center me-2">
+                 <div class="custom-user-marker d-inline-flex align-items-center justify-content-center me-1" style="width: 20px; height: 20px; font-size: 0.7rem; border-width: 2px;"><i class="bi bi-person-fill"></i></div> Tú
+            </div>
+            <div class="d-flex align-items-center me-2"><span class="badge bg-danger rounded-circle p-2 me-1 border border-white border-2 shadow-sm" style="width: 18px; height: 18px;"> </span> 0 Bicis</div>
+            <div class="d-flex align-items-center me-2"><span class="badge bg-warning rounded-circle p-2 me-1 border border-white border-2 shadow-sm" style="width: 18px; height: 18px;"> </span> 1-2 Bicis</div>
+            <div class="d-flex align-items-center"><span class="badge bg-success rounded-circle p-2 me-1 border border-white border-2 shadow-sm" style="width: 18px; height: 18px;"> </span> 3+ Bicis</div>
+        </div>
+    </div>
+
+    <div id="radarResultados" class="row justify-content-center g-3 text-start fade-in">
         </div>
 
 </div>
-
 {% endblock %}
 
 {% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
 <script>
+    let mapa = null;
+    let capaMarcadores = null;
+
+    // --- NUEVO ICONO PARA EL USUARIO (MUÑECO) ---
+    const userIcon = L.divIcon({
+        className: 'custom-user-marker', // Clase CSS personalizada definida arriba
+        html: '<i class="bi bi-person-fill" style="font-size: 1.3rem;"></i>', // Icono de Bootstrap
+        iconSize: [32, 32],   // Tamaño más grande
+        iconAnchor: [16, 16], // Centro
+        popupAnchor: [0, -16]
+    });
+
     document.getElementById('btnLocalizar').addEventListener('click', function() {
         const btnContainer = document.getElementById('pantallaInicial');
         const loading = document.getElementById('loading');
         const errorMsg = document.getElementById('errorMsg');
         const container = document.getElementById('radarResultados');
+        const mapaContenedor = document.getElementById('mapaContenedor');
 
-        // 1. Validar soporte
         if (!navigator.geolocation) {
             mostrarError("Tu navegador no soporta geolocalización.");
             return;
         }
 
-        // 2. Cambiar interfaz a "Cargando"
         btnContainer.classList.add('d-none');
+        mapaContenedor.classList.add('d-none');
         loading.classList.remove('d-none');
         errorMsg.classList.add('d-none');
         container.innerHTML = '';
 
-        // 3. Pedir posición
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
+                const userLat = position.coords.latitude;
+                const userLon = position.coords.longitude;
 
-                // 4. Llamar al Backend
-                fetch(`/radar-carga/?lat=${lat}&lon=${lon}`)
+                fetch(`/radar-carga/?lat=${userLat}&lon=${userLon}`)
                     .then(response => {
                         if (!response.ok) throw new Error("Error en el servidor");
                         return response.json();
@@ -71,14 +124,56 @@
                             return;
                         }
 
-                        // 5. Renderizar Tarjetas
+                        // --- MAPA ---
+                        mapaContenedor.classList.remove('d-none');
+                        
+                        if (!mapa) {
+                            mapa = L.map('mapaRadar').setView([userLat, userLon], 15);
+                            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                                attribution: '&copy; OpenStreetMap', maxZoom: 19
+                            }).addTo(mapa);
+                            capaMarcadores = L.layerGroup().addTo(mapa);
+                        } else {
+                            capaMarcadores.clearLayers();
+                        }
+                        
+                        // Marcador Usuario (Muñeco)
+                        L.marker([userLat, userLon], {icon: userIcon, zIndexOffset: 1000}).addTo(capaMarcadores).bindPopup("<b>¡Estás aquí!</b>");
+                        let bounds = L.latLngBounds([[userLat, userLon]]);
+
+                        // --- PROCESAR ESTACIONES ---
                         data.estaciones.forEach(est => {
-                            // --- NUEVA LÓGICA DE COLORES (Semáforo) ---
-                            // 0 -> danger (rojo)
-                            // 1-2 -> warning (naranja)
-                            // 3+ -> success (verde)
-                            let colorBici = est.bicis === 0 ? 'danger' : (est.bicis <= 2 ? 'warning' : 'success');
-                            let colorAnclaje = est.anclajes === 0 ? 'danger' : (est.anclajes <= 2 ? 'warning' : 'success');
+                            // 1. Determinar Color
+                            let colorClass = 'bg-success'; 
+                            if (est.bicis === 0) colorClass = 'bg-danger';
+                            else if (est.bicis <= 2) colorClass = 'bg-warning';
+
+                            // 2. Crear Icono Estación (BOLO MÁS GRANDE)
+                            const estacionIcon = L.divIcon({
+                                // Borde más grueso (border-3) y sombra
+                                className: `${colorClass} border border-white border-3 rounded-circle shadow`,
+                                iconSize: [26, 26],   // AUMENTADO de 18 a 26
+                                iconAnchor: [13, 13], // Centro ajustado
+                                popupAnchor: [0, -14]
+                            });
+
+                            // 3. Añadir al Mapa
+                            const marker = L.marker([est.lat, est.lon], {icon: estacionIcon}).addTo(capaMarcadores);
+                            // Popup simple y claro
+                            marker.bindPopup(`
+                                <div class="text-center" style="min-width: 120px;">
+                                    <h6 class="fw-bold mb-2 text-truncate">${est.nombre}</h6>
+                                    <div class="d-flex justify-content-center gap-2">
+                                        <span class="badge ${colorClass === 'bg-warning' ? 'text-dark' : ''} ${colorClass} border border-white">${est.bicis} Bicis</span>
+                                        <span class="badge bg-light text-dark border">${est.anclajes} Huecos</span>
+                                    </div>
+                                </div>
+                            `);
+                            bounds.extend([est.lat, est.lon]);
+
+                            // 4. Crear Tarjeta HTML (Mismo criterio de color)
+                            let colorText = est.bicis === 0 ? 'danger' : (est.bicis <= 2 ? 'warning' : 'success');
+                            let colorHueco = est.anclajes === 0 ? 'danger' : (est.anclajes <= 2 ? 'warning' : 'success');
 
                             const cardHtml = `
                                 <div class="col-12 fade-in">
@@ -94,21 +189,19 @@
                                                     ${est.distancia}m
                                                 </span>
                                             </div>
-                                            
                                             <p class="small text-muted mb-3">
                                                 <i class="bi bi-person-walking"></i> ~${est.tiempo_pie} min andando
                                             </p>
-                                            
                                             <div class="row g-2 text-center">
                                                 <div class="col-6">
-                                                    <div class="p-2 rounded bg-${colorBici} bg-opacity-10 border border-${colorBici}">
-                                                        <span class="d-block fw-bold fs-4 text-${colorBici}">${est.bicis}</span>
+                                                    <div class="p-2 rounded bg-${colorText} bg-opacity-10 border border-${colorText}">
+                                                        <span class="d-block fw-bold fs-4 text-${colorText}">${est.bicis}</span>
                                                         <small class="text-muted small text-uppercase">Bicis</small>
                                                     </div>
                                                 </div>
                                                 <div class="col-6">
-                                                    <div class="p-2 rounded bg-${colorAnclaje} bg-opacity-10 border border-${colorAnclaje}">
-                                                        <span class="d-block fw-bold fs-4 text-${colorAnclaje}">${est.anclajes}</span>
+                                                    <div class="p-2 rounded bg-${colorHueco} bg-opacity-10 border border-${colorHueco}">
+                                                        <span class="d-block fw-bold fs-4 text-${colorHueco}">${est.anclajes}</span>
                                                         <small class="text-muted small text-uppercase">Huecos</small>
                                                     </div>
                                                 </div>
@@ -120,38 +213,35 @@
                             container.innerHTML += cardHtml;
                         });
                         
-                        // Botón flotante para buscar otra vez
+                        // Ajustar zoom con un poco más de margen (padding 50)
+                        mapa.fitBounds(bounds, {padding: [50, 50]});
+                        mapa.invalidateSize();
+
                         container.innerHTML += `
                             <div class="col-12 text-center mt-4">
-                                <button onclick="location.reload()" class="btn btn-outline-primary rounded-pill btn-sm">
+                                <button onclick="location.reload()" class="btn btn-outline-primary rounded-pill btn-sm shadow-sm">
                                     <i class="bi bi-arrow-clockwise"></i> Actualizar Ubicación
                                 </button>
                             </div>
                         `;
-
                     })
                     .catch(err => {
                         loading.classList.add('d-none');
-                        mostrarError("Error de conexión o sin datos recientes. Inténtalo de nuevo.");
+                        mostrarError("Error al obtener datos. Inténtalo de nuevo.");
                         console.error(err);
                     });
             },
             (error) => {
                 loading.classList.add('d-none');
-                let msg = "Error desconocido.";
-                switch(error.code) {
-                    case error.PERMISSION_DENIED: msg = "Necesitamos permiso de ubicación para funcionar."; break;
-                    case error.POSITION_UNAVAILABLE: msg = "La información de ubicación no está disponible."; break;
-                    case error.TIMEOUT: msg = "Se agotó el tiempo de espera al obtener la ubicación."; break;
-                }
+                let msg = "Error de GPS.";
+                if (error.code === 1) msg = "Activa el GPS para usar el radar.";
                 mostrarError(msg);
-                // Restaurar botón tras unos segundos
                 setTimeout(() => {
                     btnContainer.classList.remove('d-none');
                     errorMsg.classList.add('d-none');
                 }, 4000);
             },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 300000 }
         );
     });
 
@@ -161,19 +251,4 @@
         errorDiv.classList.remove('d-none');
     }
 </script>
-
-<style>
-    .pulse-animation {
-        animation: pulse-shadow 2s infinite;
-    }
-    @keyframes pulse-shadow {
-        0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.4); }
-        70% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); }
-    }
-    /* Ajuste para que el fondo de color se vea bien en modo claro */
-    .bg-opacity-10 {
-        --bs-bg-opacity: 0.15; 
-    }
-</style>
 {% endblock %}
