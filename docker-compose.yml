@@ -17,8 +17,10 @@ services:
     # Hemos borrado 'command:'. Ahora el Dockerfile y entrypoint.sh deciden qué ejecutar.
     volumes:
       - ./src:/app
+      - static_volume:/app/staticfiles
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+
     env_file:
       - .env
     depends_on:
@@ -43,5 +45,33 @@ services:
       - 8.8.8.8
       - 8.8.4.4
 
+
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: bizi_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"  # <--- AÑADIR PUERTO 443
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - static_volume:/app/staticfiles
+      # 👇 AÑADIR ESTOS DOS VOLÚMENES NUEVOS
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - web
+
+  # 👇 NUEVO SERVICIO
+  certbot:
+    image: certbot/certbot
+    container_name: bizi_certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+
 volumes:
   postgres_data:
+  static_volume:
+
