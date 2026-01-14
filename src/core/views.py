@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
 from django.urls import reverse
-from django.db.models import Sum, Avg
+from django.db.models import Sum, Avg, Count, Q, F, FloatField, ExpressionWrapper
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import JsonResponse 
 import json
@@ -10,8 +10,10 @@ import datetime
 from datetime import timedelta
 from .models import Estacion, LecturaEstacion, Captura
 
-# --- FUNCIÓN AUXILIAR: CALCULAR DISTANCIA (Haversine) ---
+# --- FUNCIONES AUXILIARES ---
+
 def haversine(lat1, lon1, lat2, lon2):
+    """Calcula distancia en metros entre dos coordenadas"""
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
@@ -20,29 +22,50 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
     return R * c
 
-# --- VISTAS PRINCIPALES ---
+def get_ultima_actualizacion():
+    """Devuelve el timestamp de la última captura válida para el footer legal"""
+    ultima = Captura.objects.filter(lecturas__isnull=False).order_by('-timestamp').first()
+    return ultima.timestamp if ultima else timezone.now()
+
+def obtener_nivel_probabilidad(porcentaje):
+    if porcentaje >= 80: return {'texto': 'Muy Alta', 'clase': 'success', 'color': '#198754', 'ancho': 100}
+    elif porcentaje >= 60: return {'texto': 'Alta', 'clase': 'success', 'color': '#75b798', 'ancho': 75}
+    elif porcentaje >= 40: return {'texto': 'Media', 'clase': 'warning', 'color': '#ffc107', 'ancho': 50}
+    elif porcentaje >= 20: return {'texto': 'Baja', 'clase': 'danger', 'color': '#fd7e14', 'ancho': 25}
+    else: return {'texto': 'Muy Baja', 'clase': 'danger', 'color': '#dc3545', 'ancho': 10}
+
+# --- VISTAS ---
 
 def lista_estaciones(request):
     estaciones = Estacion.objects.all().order_by('id_externo')
     desde = timezone.now() - timedelta(hours=24)
     capturas_recientes = Captura.objects.filter(timestamp__gte=desde).order_by('timestamp')
     datos_globales = []
+    
+    # Optimización: Agregación en base de datos si fuera posible, aquí mantenemos lógica python
     for c in capturas_recientes:
         total = c.lecturas.aggregate(t=Sum('bicis_disponibles'))['t']
         if total is not None:
             datos_globales.append({'x': c.timestamp.isoformat(), 'y': total})
-    context = {'estaciones': estaciones, 'datos_globales': json.dumps(datos_globales, cls=DjangoJSONEncoder)}
+            
+    context = {
+        'estaciones': estaciones, 
+        'datos_globales': json.dumps(datos_globales, cls=DjangoJSONEncoder),
+        'last_update': get_ultima_actualizacion()
+    }
     return render(request, 'core/lista_estaciones.html', context)
 
 def detalle_estacion(request, estacion_id):
     estacion = get_object_or_404(Estacion, id_externo=estacion_id)
     rango = request.GET.get('rango', '24h')
+    
     if rango == '7d':
         horas_atras, titulo_rango = 168, "Últimos 7 días"
     else:
         horas_atras, titulo_rango, rango = 24, "Últimas 24 horas", '24h'
 
     start_date = timezone.now() - timedelta(hours=horas_atras)
+    # Optimización: select_related para evitar N+1 queries
     lecturas = list(LecturaEstacion.objects.filter(estacion=estacion, captura__timestamp__gte=start_date).select_related('captura').order_by('captura__timestamp'))
     
     dataset_bicis, dataset_anclajes = [], []
@@ -65,6 +88,7 @@ def detalle_estacion(request, estacion_id):
             'pct_sin_bicis': round((c_sb/total)*100, 1), 'pct_sin_anclajes': round((c_sa/total)*100, 1)
         }
 
+    # Heatmap
     lecturas_mes = LecturaEstacion.objects.filter(estacion=estacion, captura__timestamp__gte=timezone.now()-timedelta(days=30)).select_related('captura').only('captura__timestamp', 'bicis_disponibles')
     heatmap_raw = [[[{'s': 0, 'c': 0} for _ in range(4)] for _ in range(24)] for _ in range(7)]
     for l in lecturas_mes:
@@ -74,23 +98,71 @@ def detalle_estacion(request, estacion_id):
 
     heatmap_data = [{'nombre': ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][i], 'horas': [[round(heatmap_raw[i][h][q]['s']/heatmap_raw[i][h][q]['c'], 1) if heatmap_raw[i][h][q]['c']>0 else None for q in range(4)] for h in range(24)]} for i in range(7)]
 
-    return render(request, 'core/detalle_estacion.html', {'estacion': estacion, 'lecturas': list(reversed(lecturas[-10:])), 'dataset_bicis': dataset_bicis, 'dataset_anclajes': dataset_anclajes, 'stats': stats, 'heatmap_data': heatmap_data, 'rango_actual': rango, 'titulo_rango': titulo_rango})
+    context = {
+        'estacion': estacion, 
+        'lecturas': list(reversed(lecturas[-10:])), 
+        'dataset_bicis': dataset_bicis, 
+        'dataset_anclajes': dataset_anclajes, 
+        'stats': stats, 
+        'heatmap_data': heatmap_data, 
+        'rango_actual': rango, 
+        'titulo_rango': titulo_rango,
+        'last_update': get_ultima_actualizacion()
+    }
+    return render(request, 'core/detalle_estacion.html', context)
 
 def mapa_estaciones(request):
     hace_24h = timezone.now() - timedelta(hours=24)
     estaciones_static = {e.id_externo: {'lat': float(e.latitud), 'lon': float(e.longitud), 'nombre': e.nombre, 'url': reverse('detalle_estacion', args=[e.id_externo])} for e in Estacion.objects.all()}
     capturas = list(Captura.objects.filter(timestamp__gte=hace_24h).order_by('timestamp'))[::2]
     timeline_data = [{'ts': timezone.localtime(c.timestamp).strftime("%H:%M"), 'd': {str(i[0]): [i[1], i[2]] for i in c.lecturas.values_list('estacion__id_externo', 'bicis_disponibles', 'anclajes_libres')}} for c in capturas]
-    return render(request, 'core/mapa_estaciones.html', {'estaciones_static': json.dumps(estaciones_static, cls=DjangoJSONEncoder), 'timeline_json': json.dumps(timeline_data, cls=DjangoJSONEncoder)})
+    
+    context = {
+        'estaciones_static': json.dumps(estaciones_static, cls=DjangoJSONEncoder), 
+        'timeline_json': json.dumps(timeline_data, cls=DjangoJSONEncoder),
+        'last_update': get_ultima_actualizacion()
+    }
+    return render(request, 'core/mapa_estaciones.html', context)
 
-# --- ORÁCULO INTELIGENTE ---
+# --- NUEVA VISTA DE ANALÍTICA (RANKING Y FILTROS) ---
 
-def obtener_nivel_probabilidad(porcentaje):
-    if porcentaje >= 80: return {'texto': 'Muy Alta', 'clase': 'success', 'color': '#198754', 'ancho': 100}
-    elif porcentaje >= 60: return {'texto': 'Alta', 'clase': 'success', 'color': '#75b798', 'ancho': 75}
-    elif porcentaje >= 40: return {'texto': 'Media', 'clase': 'warning', 'color': '#ffc107', 'ancho': 50}
-    elif porcentaje >= 20: return {'texto': 'Baja', 'clase': 'danger', 'color': '#fd7e14', 'ancho': 25}
-    else: return {'texto': 'Muy Baja', 'clase': 'danger', 'color': '#dc3545', 'ancho': 10}
+def analitica_global(request):
+    """
+    Vista nueva para mostrar ránkings y estadísticas avanzadas.
+    Permite filtrar horario nocturno.
+    """
+    # 1. Toggle Nocturno (00:00 - 06:00)
+    ignore_night = request.GET.get('ignore_night', 'false') == 'true'
+    dias_atras = 7 # Analizar última semana por defecto
+    
+    limite = timezone.now() - timedelta(days=dias_atras)
+    queryset = LecturaEstacion.objects.filter(captura__timestamp__gte=limite)
+
+    if ignore_night:
+        # Excluir horas de 0 a 5 (00:00 a 05:59)
+        queryset = queryset.exclude(captura__timestamp__hour__range=(0, 5))
+
+    # 2. Ranking de estaciones "Offline" o "Rotas" (0 bicis y 0 anclajes)
+    # Agrupamos por estación y calculamos el % de veces que reportó 0/0
+    ranking = queryset.values('estacion__id_externo', 'estacion__nombre').annotate(
+        total_registros=Count('id'),
+        fallos=Count('id', filter=Q(bicis_disponibles=0) | Q(anclajes_libres=0))
+    ).annotate(
+        porcentaje_fallo=ExpressionWrapper(
+            F('fallos') * 100.0 / F('total_registros'),
+            output_field=FloatField()
+        )
+    ).exclude(total_registros=0).order_by('-porcentaje_fallo')[:15] # Top 15
+
+    context = {
+        'ranking': list(ranking),
+        'ignore_night': ignore_night,
+        'dias_atras': dias_atras,
+        'last_update': get_ultima_actualizacion()
+    }
+    return render(request, 'core/analitica.html', context)
+
+# --- ORÁCULO INTELIGENTE (PLANIFICADOR) ---
 
 def calcular_prediccion_precisa(estacion_id, dia, hora, minuto):
     dummy = datetime.datetime(2000, 1, 1, hora, minuto)
@@ -111,7 +183,6 @@ def calcular_prediccion_precisa(estacion_id, dia, hora, minuto):
 def buscar_alternativas(target_id, dia, hora, minuto, tipo):
     try:
         origen = Estacion.objects.get(id_externo=target_id)
-        # Filtro de seguridad para datos reales
         ult_captura = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()
         candidatas = []
         for est in Estacion.objects.exclude(id_externo=target_id):
@@ -143,20 +214,16 @@ def planificador(request):
             dia, hora, minuto = int(request.GET.get('dia')), int(request.GET.get('hora')), int(request.GET.get('minuto', 0))
             obj_o, obj_d = Estacion.objects.get(id_externo=o_id), Estacion.objects.get(id_externo=d_id)
             
-            # 1. TIEMPOS
             now = timezone.localtime()
             target_salida = now.replace(hour=hora, minute=minuto, second=0, microsecond=0)
             mins_diff = (target_salida - now).total_seconds() / 60
             
-            # 2. VIAJE
             dist = haversine(float(obj_o.latitud), float(obj_o.longitud), float(obj_d.latitud), float(obj_d.longitud)) * 1.4
             mins_viaje = max(5, int(dist / 200))
             llegada = target_salida + timedelta(minutes=mins_viaje)
             dia_llegada = dia + 1 if llegada.day != target_salida.day else dia
             if dia_llegada > 7: dia_llegada = 1
 
-            # 3. REAL vs HISTÓRICO (Lógica Híbrida)
-            # Filtro de seguridad: Solo capturas con lecturas
             ult = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()
             ro, rd = {'b': 0, 'a': 0}, {'b': 0, 'a': 0}
             so_real, sd_real, hay_real = 0, 0, False
@@ -177,25 +244,21 @@ def planificador(request):
             so_hist = do_hist['pct_bici_num'] if do_hist else 0
             sd_hist = dd_hist['pct_hueco_num'] if dd_hist else 0
 
-            # --- SMART WEIGHTING (LOGICA 20 MINUTOS) ---
             peso_real, fuente = 0.0, "Histórico 📚"
             
-            # Verificar si la petición es "ahora" o cercana
             if mins_diff > -20 and mins_diff < 1440:
                 if mins_diff < 20: 
                     peso_real = 1.0
                     fuente = "Tiempo Real 📡"
                 elif mins_diff < 120: 
-                    # Entre 20 min y 2 horas: Híbrido
                     peso_real = 1.0 - ((mins_diff - 20)/100.0)
-                    fuente = "Híbrido (Real + Hist) 🧠"
+                    fuente = "Híbrido 🧠"
             
             if not hay_real: peso_real = 0.0
 
             prob_o = (so_real * peso_real) + (so_hist * (1 - peso_real))
             prob_d = (sd_real * peso_real) + (sd_hist * (1 - peso_real))
 
-            # 4. RESULTADO
             sug_o = buscar_alternativas(o_id, dia, hora, minuto, 'bici') if prob_o < 50 else []
             sug_d = buscar_alternativas(d_id, dia_llegada, llegada.hour, llegada.minute, 'hueco') if prob_d < 50 else []
 
@@ -205,9 +268,17 @@ def planificador(request):
                 'destino': {'nombre': obj_d.nombre, 'nivel': obtener_nivel_probabilidad(prob_d), 'actual_anclajes': rd['a'], 'media': dd_hist['media_anclajes'] if dd_hist else 0, 'tendencia': dd_hist['tendencia'] if dd_hist else '-', 'alternativas': sug_d}
             }
         except Exception as e: print(f"Error: {e}")
-    return render(request, 'core/planificador.html', {'estaciones': estaciones, 'resultado': res, 'form_data': request.GET})
+    
+    context = {
+        'estaciones': estaciones, 
+        'resultado': res, 
+        'form_data': request.GET,
+        'last_update': get_ultima_actualizacion()
+    }
+    return render(request, 'core/planificador.html', context)
 
-def radar_index(request): return render(request, 'core/radar.html')
+def radar_index(request): 
+    return render(request, 'core/radar.html', {'last_update': get_ultima_actualizacion()})
 
 def radar_carga(request):
     try: 
@@ -218,7 +289,6 @@ def radar_carga(request):
 
     candidatas = sorted([(haversine(lat, lon, float(e.latitud), float(e.longitud)), e) for e in Estacion.objects.all()], key=lambda x: x[0])[:5]
     
-    # Filtro de seguridad: ignorar capturas vacías
     ult = Captura.objects.filter(lecturas__isnull=False).distinct().order_by('-timestamp').first()
     
     res = []

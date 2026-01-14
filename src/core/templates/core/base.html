@@ -12,16 +12,37 @@
 </head>
 <body class="bg-light">
 
-    {% include 'core/includes/navbar.html' %}
+ {% include 'core/includes/navbar.html' %}
 
     {% block content %}
     {% endblock %}
 
-    <footer class="text-center text-muted py-4 mt-5 border-top">
-        <small>
-            HabemusBizi es un proyecto independiente desarrollado por jmmesa.<br>
-            No tiene vinculación oficial con el servicio Bizi Zaragoza.
-        </small>
+    <footer class="text-center text-muted py-4 mt-5 border-top bg-white">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-10">
+                    <p class="mb-1">
+                        <strong>HabemusBizi</strong> es una aplicación independiente desarrollada por jmmesa.
+                    </p>
+                    <p class="small text-danger mb-2">
+                        <i class="bi bi-exclamation-triangle"></i> No tiene vinculación oficial con el Ayuntamiento de Zaragoza ni con la empresa concesionaria del servicio Bizi.
+                    </p>
+                    
+                    <hr class="w-50 mx-auto my-3">
+                    
+                    <p class="small mb-0">
+                        <strong>Fuente de datos:</strong> 
+                        <a href="https://www.zaragoza.es/sede/portal/datos-abiertos/" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                            Ayuntamiento de Zaragoza (Datos Abiertos)
+                        </a>.
+                    </p>
+                    <p class="small text-muted">
+                        <i class="bi bi-clock"></i> Última actualización de datos: 
+                        <strong>{{ last_update|date:"d/m/Y H:i"|default:"--:--" }}</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

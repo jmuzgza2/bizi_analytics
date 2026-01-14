@@ -25,3 +25,10 @@ db.sqlite3
 
 src/staticfiles/
 staticfiles/
+
+
+# Certificados SSL y configuración de Certbot
+certbot/conf/
+certbot/work/
+certbot/logs/
+certbot/www/
