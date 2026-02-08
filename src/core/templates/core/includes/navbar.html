@@ -42,6 +42,11 @@
                 <i class="bi bi-broadcast fs-6 me-1"></i> <span class="d-none d-sm-inline" style="font-size: 0.9rem;">Radar</span>
             </a>
 
+            <a href="{% url 'analitica' %}" 
+               class="btn {% if url_name == 'analitica' %}btn-light text-primary{% else %}btn-outline-light{% endif %} btn-sm fw-bold px-2 rounded-pill shadow-sm d-flex align-items-center">
+                <i class="bi bi-bar-chart-fill fs-6 me-1"></i> <span class="d-none d-sm-inline" style="font-size: 0.9rem;">Ranking</span>
+            </a>
+
             
             {% endwith %}
         </div>

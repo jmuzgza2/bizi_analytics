@@ -1,0 +1,112 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Analítica - HabemusBizi{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2 mb-0"><i class="bi bi-bar-chart-fill text-primary"></i> Analítica Avanzada</h1>
+        
+        <form method="get" class="d-flex align-items-center bg-white p-2 rounded shadow-sm border">
+            <div class="form-check form-switch me-2">
+                <input class="form-check-input" type="checkbox" role="switch" id="ignoreNight" name="ignore_night" value="true" {% if ignore_night %}checked{% endif %} onchange="this.form.submit()">
+                <label class="form-check-label small" for="ignoreNight">Ignorar Noche (00-06h)</label>
+            </div>
+            <span class="badge bg-secondary">Últimos {{ dias_atras }} días</span>
+        </form>
+    </div>
+
+    <!-- Ranking 1: SIN BICIS (PRINCIPAL) -->
+    <div class="card shadow mb-4 border-warning">
+        <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+            <h4 class="mb-0"><i class="bi bi-bicycle"></i> Top Estaciones Sin Bicis (Vacías)</h4>
+            <small>Mayor tiempo sin disponibilidad</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">Estación</th>
+                            <th scope="col" style="width: 50%;">% del Tiempo (Sobre Lecturas)</th>
+                            <th scope="col" class="text-end">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in ranking_sin_bicis %}
+                        <tr>
+                            <th scope="row">{{ forloop.counter }}</th>
+                            <td>
+                                <strong>{{ item.nombre }}</strong>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="me-2 fw-bold">{{ item.porcentaje }}%</span>
+                                    <div class="progress flex-grow-1" style="height: 12px;">
+                                        <div class="progress-bar bg-warning" role="progressbar" style="width: {{ item.porcentaje|floatformat:0 }}%;" aria-valuenow="{{ item.porcentaje }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <a href="{% url 'detalle_estacion' item.id %}" class="btn btn-sm btn-outline-secondary">Ver</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center py-4">Sin incidencias de estaciones vacías.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ranking 2: SIN ANCLAJES (SECUNDARIO) -->
+    <div class="card shadow-sm mb-4 border-info">
+        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-p-square"></i> Top Estaciones Sin Anclajes (Llenas)</h5>
+            <small>No se puede aparcar</small>
+        </div>
+        <div class="card-body p-0">
+             <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">Estación</th>
+                            <th scope="col" style="width: 50%;">% del Tiempo (Sobre Lecturas)</th>
+                             <th scope="col" class="text-end">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in ranking_sin_anclajes %}
+                        <tr>
+                            <th scope="row">{{ forloop.counter }}</th>
+                             <td>
+                                <strong>{{ item.nombre }}</strong>
+                            </td>
+                             <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="me-2 fw-bold">{{ item.porcentaje }}%</span>
+                                    <div class="progress flex-grow-1" style="height: 12px;">
+                                        <div class="progress-bar bg-info" role="progressbar" style="width: {{ item.porcentaje|floatformat:0 }}%;" aria-valuenow="{{ item.porcentaje }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                </div>
+                            </td>
+                             <td class="text-end">
+                                <a href="{% url 'detalle_estacion' item.id %}" class="btn btn-sm btn-outline-secondary">Ver</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                         <tr><td colspan="4" class="text-center py-4">Sin incidencias de estaciones llenas.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+
+
+</div>
+{% endblock %}

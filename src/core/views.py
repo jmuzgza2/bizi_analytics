@@ -142,20 +142,49 @@ def analitica_global(request):
         # Excluir horas de 0 a 5 (00:00 a 05:59)
         queryset = queryset.exclude(captura__timestamp__hour__range=(0, 5))
 
-    # 2. Ranking de estaciones "Offline" o "Rotas" (0 bicis y 0 anclajes)
-    # Agrupamos por estación y calculamos el % de veces que reportó 0/0
-    ranking = queryset.values('estacion__id_externo', 'estacion__nombre').annotate(
+    # 2. Ranking "SIN BICIS" (Principal)
+    # Contamos cuántas veces bicis_disponibles = 0
+    # Ordenamos por % DESC y mostramos TOP 20
+    raw_sin_bicis = queryset.values('estacion__id_externo', 'estacion__nombre').annotate(
         total_registros=Count('id'),
-        fallos=Count('id', filter=Q(bicis_disponibles=0) | Q(anclajes_libres=0))
-    ).annotate(
-        porcentaje_fallo=ExpressionWrapper(
-            F('fallos') * 100.0 / F('total_registros'),
+        ceros=Count('id', filter=Q(bicis_disponibles=0))
+    ).filter(ceros__gt=0).annotate(
+        porcentaje_calc=ExpressionWrapper(
+            F('ceros') * 100.0 / F('total_registros'),
             output_field=FloatField()
         )
-    ).exclude(total_registros=0).order_by('-porcentaje_fallo')[:15] # Top 15
+    ).order_by('-porcentaje_calc')[:20]
+
+    ranking_sin_bicis = []
+    for r in raw_sin_bicis:
+        ranking_sin_bicis.append({
+            'id': r['estacion__id_externo'],
+            'nombre': r['estacion__nombre'],
+            'porcentaje': round(r['porcentaje_calc'], 1),
+        })
+
+    # 3. Ranking "SIN ANCLAJES" (Full)
+    raw_sin_anclajes = queryset.values('estacion__id_externo', 'estacion__nombre').annotate(
+        total_registros=Count('id'),
+        ceros=Count('id', filter=Q(anclajes_libres=0))
+    ).filter(ceros__gt=0).annotate(
+        porcentaje_calc=ExpressionWrapper(
+            F('ceros') * 100.0 / F('total_registros'),
+            output_field=FloatField()
+        )
+    ).order_by('-porcentaje_calc')[:20]
+
+    ranking_sin_anclajes = []
+    for r in raw_sin_anclajes:
+        ranking_sin_anclajes.append({
+            'id': r['estacion__id_externo'],
+            'nombre': r['estacion__nombre'],
+            'porcentaje': round(r['porcentaje_calc'], 1),
+        })
 
     context = {
-        'ranking': list(ranking),
+        'ranking_sin_bicis': ranking_sin_bicis,
+        'ranking_sin_anclajes': ranking_sin_anclajes,
         'ignore_night': ignore_night,
         'dias_atras': dias_atras,
         'last_update': get_ultima_actualizacion()

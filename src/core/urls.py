@@ -11,4 +11,5 @@ urlpatterns = [
     path('planificador/', views.planificador, name='planificador'),
     path('radar/', views.radar_index, name='radar'),
     path('radar-carga/', views.radar_carga, name='radar_carga'),
+    path('analitica/', views.analitica_global, name='analitica'),
 ]
